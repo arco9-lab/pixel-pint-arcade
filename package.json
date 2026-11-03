@@ -9,6 +9,8 @@
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f app db",
+    "postinstall": "prisma generate",
+    "db:seed": "prisma db seed",
     "lint": "eslint",
     "test": "vitest run --config config/vitest.config.mts",
     "test:watch": "vitest --config config/vitest.config.mts",
@@ -50,6 +52,7 @@
     "jsdom": "^29.1.1",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.9"
   }

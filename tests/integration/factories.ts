@@ -1,6 +1,6 @@
 import { prisma } from "@/db/prisma";
 
-type TestRole = "USER" | "ADMIN";
+type TestRole = "USER" | "ADMIN" | "DEMO";
 
 export async function createTestUser(options?: {
   id?: string;

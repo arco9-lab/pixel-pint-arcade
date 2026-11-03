@@ -25,6 +25,7 @@ export async function cleanupE2EDatabase() {
   await pool.query('DELETE FROM "session"');
   await pool.query('DELETE FROM "account"');
   await pool.query('DELETE FROM "verification"');
+  await pool.query('DELETE FROM "rateLimit"');
   await pool.query('DELETE FROM "user"');
 }
 

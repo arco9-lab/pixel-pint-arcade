@@ -13,7 +13,7 @@ const authMock = vi.hoisted(() => ({
     name: string;
     email: string;
     image: string | null;
-    role: "USER" | "ADMIN";
+    role: "USER" | "ADMIN" | "DEMO";
   },
 }));
 
@@ -34,7 +34,7 @@ import {
   getCurrentUserComments,
 } from "@/features/comments/data/comments";
 
-async function signIn(role: "USER" | "ADMIN" = "USER") {
+async function signIn(role: "USER" | "ADMIN" | "DEMO" = "USER") {
   const user = await createTestUser({ role });
   authMock.currentUser = user;
 

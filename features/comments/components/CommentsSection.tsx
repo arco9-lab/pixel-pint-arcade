@@ -13,7 +13,7 @@ type CommentsSectionProps = {
   currentUser:
     | {
         id: string;
-        role: "USER" | "ADMIN";
+        role: "USER" | "ADMIN" | "DEMO";
       }
     | null;
 };

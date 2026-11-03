@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   USER
   ADMIN
+  DEMO
 }
 
 model User {
@@ -19,6 +20,8 @@ model User {
   emailVerified Boolean        @default(false)
   image         String?
   role          Role           @default(USER)
+  demoExpiresAt DateTime?
+  demoIpHash    String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   sessions      Session[]
@@ -29,6 +32,8 @@ model User {
   postBookmarks PostBookmark[]
 
   @@unique([email])
+  @@index([role, demoExpiresAt])
+  @@index([demoIpHash, createdAt])
   @@map("user")
 }
 
@@ -78,6 +83,15 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@map("rateLimit")
 }
 
 model Post {
