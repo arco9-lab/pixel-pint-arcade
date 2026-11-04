@@ -4,11 +4,12 @@ export type CommentDTO = {
   postId: string;
   parentId: string | null;
   createdAt: string;
+  deleted: boolean;
   author: {
     id: string;
     name: string;
     image: string | null;
-  };
+  } | null;
 };
 
 export type AccountCommentDTO = {

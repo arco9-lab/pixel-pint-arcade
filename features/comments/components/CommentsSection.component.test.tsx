@@ -13,6 +13,7 @@ const comments: CommentDTO[] = [
     postId: "post-1",
     parentId: null,
     createdAt: "2026-01-01T12:00:00.000Z",
+    deleted: false,
     author: {
       id: "user-1",
       name: "User One",
@@ -25,6 +26,7 @@ const comments: CommentDTO[] = [
     postId: "post-1",
     parentId: "root",
     createdAt: "2026-01-01T12:05:00.000Z",
+    deleted: false,
     author: {
       id: "user-2",
       name: "User Two",

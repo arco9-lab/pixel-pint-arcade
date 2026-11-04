@@ -8,21 +8,50 @@ import type {
   CommentDTO,
 } from "@/features/comments/types";
 
+const commentSelect = {
+  id: true,
+  body: true,
+  postId: true,
+  parentId: true,
+  createdAt: true,
+  deletedAt: true,
+  author: {
+    select: {
+      id: true,
+      name: true,
+      image: true,
+    },
+  },
+} as const;
+
 const toCommentDTO = (comment: {
   id: string;
   body: string;
   postId: string;
   parentId: string | null;
   createdAt: Date;
+  deletedAt: Date | null;
   author: {
     id: string;
     name: string;
     image: string | null;
-  };
-}): CommentDTO => ({
-  ...comment,
-  createdAt: comment.createdAt.toISOString(),
-});
+  } | null;
+}): CommentDTO => {
+  const { deletedAt, ...visibleFields } = comment;
+  const createdAt = comment.createdAt.toISOString();
+
+  if (deletedAt) {
+    return {
+      ...visibleFields,
+      body: "",
+      author: null,
+      createdAt,
+      deleted: true,
+    };
+  }
+
+  return { ...visibleFields, createdAt, deleted: false };
+};
 
 const COMMENT_RATE_LIMIT_MS = 30_000;
 const MAX_COMMENT_LINKS = 2;
@@ -44,20 +73,7 @@ export const getCommentsForPost = async (
       },
     },
     orderBy: { createdAt: "asc" },
-    select: {
-      id: true,
-      body: true,
-      postId: true,
-      parentId: true,
-      createdAt: true,
-      author: {
-        select: {
-          id: true,
-          name: true,
-          image: true,
-        },
-      },
-    },
+    select: commentSelect,
   });
 
   return comments.map(toCommentDTO);
@@ -126,6 +142,7 @@ export const createComment = async (input: {
         where: {
           id: input.parentId,
           postId: input.postId,
+          deletedAt: null,
         },
         select: { id: true },
       });
@@ -142,20 +159,7 @@ export const createComment = async (input: {
         parentId: input.parentId,
         authorId: user.id,
       },
-      select: {
-        id: true,
-        body: true,
-        postId: true,
-        parentId: true,
-        createdAt: true,
-        author: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
-      },
+      select: commentSelect,
     });
 
     return toCommentDTO(comment);
@@ -165,7 +169,7 @@ export const createComment = async (input: {
 export const getCurrentUserComments = async (): Promise<AccountCommentDTO[]> => {
   const user = await requireUserRecord();
   const comments = await prisma.comment.findMany({
-    where: { authorId: user.id },
+    where: { authorId: user.id, deletedAt: null },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -189,23 +193,60 @@ export const getCurrentUserComments = async (): Promise<AccountCommentDTO[]> => 
 
 export const deleteComment = async (commentId: string) => {
   const user = await requireUserRecord();
-  const comment = await prisma.comment.findUnique({
-    where: { id: commentId },
-    select: {
-      id: true,
-      authorId: true,
-    },
-  });
 
-  if (!comment) {
-    throw new Error("Comment not found");
-  }
+  await prisma.$transaction(async (transaction) => {
+    await transaction.$executeRaw`SELECT id FROM "Comment" WHERE id = ${commentId} FOR UPDATE`;
 
-  if (comment.authorId !== user.id && user.role !== "ADMIN") {
-    throw new Error("Forbidden");
-  }
+    const comment = await transaction.comment.findFirst({
+      where: { id: commentId, deletedAt: null },
+      select: {
+        id: true,
+        authorId: true,
+        parentId: true,
+        _count: { select: { replies: true } },
+      },
+    });
 
-  await prisma.comment.delete({
-    where: { id: comment.id },
+    if (!comment) {
+      throw new Error("Comment not found");
+    }
+
+    if (comment.authorId !== user.id && user.role !== "ADMIN") {
+      throw new Error("Forbidden");
+    }
+
+    if (comment._count.replies > 0) {
+      await transaction.comment.update({
+        where: { id: comment.id },
+        data: { body: "", deletedAt: new Date() },
+      });
+
+      return;
+    }
+
+    await transaction.comment.delete({ where: { id: comment.id } });
+
+    let ancestorId = comment.parentId;
+
+    while (ancestorId) {
+      await transaction.$executeRaw`SELECT id FROM "Comment" WHERE id = ${ancestorId} FOR UPDATE`;
+
+      const ancestor = await transaction.comment.findUnique({
+        where: { id: ancestorId },
+        select: {
+          id: true,
+          deletedAt: true,
+          parentId: true,
+          _count: { select: { replies: true } },
+        },
+      });
+
+      if (!ancestor?.deletedAt || ancestor._count.replies > 0) {
+        break;
+      }
+
+      await transaction.comment.delete({ where: { id: ancestor.id } });
+      ancestorId = ancestor.parentId;
+    }
   });
 };

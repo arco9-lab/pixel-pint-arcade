@@ -60,6 +60,128 @@ describe("deleteExpiredDemoUsers", () => {
     expect(await prisma.post.findUnique({ where: { id: adminPost.id } })).not.toBeNull();
   });
 
+  it("turns a demo comment with an admin reply into a tombstone", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const adminPost = await createTestPost({ authorId: admin.id });
+    const expired = await createDemoUser(hoursFromNow(-1));
+    const demoComment = await createTestComment({
+      authorId: expired.id,
+      postId: adminPost.id,
+      body: "Demo question",
+    });
+    const adminReply = await createTestComment({
+      authorId: admin.id,
+      postId: adminPost.id,
+      parentId: demoComment.id,
+      body: "Admin answer",
+    });
+
+    const result = await deleteExpiredDemoUsers(now);
+
+    expect(result).toMatchObject({
+      deletedUsers: 1,
+      deletedComments: 0,
+      tombstonedComments: 1,
+    });
+    await expect(
+      prisma.comment.findUniqueOrThrow({ where: { id: adminReply.id } }),
+    ).resolves.toMatchObject({ body: "Admin answer", authorId: admin.id });
+    await expect(
+      prisma.comment.findUniqueOrThrow({ where: { id: demoComment.id } }),
+    ).resolves.toMatchObject({
+      body: "",
+      authorId: null,
+      deletedAt: expect.any(Date),
+    });
+  });
+
+  it("keeps the admin reply in a demo, admin, demo chain", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const adminPost = await createTestPost({ authorId: admin.id });
+    const expired = await createDemoUser(hoursFromNow(-1));
+    const top = await createTestComment({
+      authorId: expired.id,
+      postId: adminPost.id,
+    });
+    const middle = await createTestComment({
+      authorId: admin.id,
+      postId: adminPost.id,
+      parentId: top.id,
+    });
+    const bottom = await createTestComment({
+      authorId: expired.id,
+      postId: adminPost.id,
+      parentId: middle.id,
+    });
+
+    await deleteExpiredDemoUsers(now);
+
+    expect(
+      await prisma.comment.findUnique({ where: { id: bottom.id } }),
+    ).toBeNull();
+    await expect(
+      prisma.comment.findUniqueOrThrow({ where: { id: top.id } }),
+    ).resolves.toMatchObject({ authorId: null, deletedAt: expect.any(Date) });
+    await expect(
+      prisma.comment.findUniqueOrThrow({ where: { id: middle.id } }),
+    ).resolves.toMatchObject({ authorId: admin.id, deletedAt: null });
+  });
+
+  it("removes a whole chain that only the demo user took part in", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const adminPost = await createTestPost({ authorId: admin.id });
+    const expired = await createDemoUser(hoursFromNow(-1));
+    const top = await createTestComment({
+      authorId: expired.id,
+      postId: adminPost.id,
+    });
+    const reply = await createTestComment({
+      authorId: expired.id,
+      postId: adminPost.id,
+      parentId: top.id,
+    });
+    await createTestComment({
+      authorId: expired.id,
+      postId: adminPost.id,
+      parentId: reply.id,
+    });
+
+    const result = await deleteExpiredDemoUsers(now);
+
+    expect(result).toMatchObject({ deletedComments: 3, tombstonedComments: 0 });
+    expect(await prisma.comment.count()).toBe(0);
+  });
+
+  it("removes leftover tombstones that no longer have replies", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const adminPost = await createTestPost({ authorId: admin.id });
+    const author = await createTestUser();
+    const leftoverParent = await createTestComment({
+      authorId: author.id,
+      postId: adminPost.id,
+    });
+    const leftoverChild = await createTestComment({
+      authorId: author.id,
+      postId: adminPost.id,
+      parentId: leftoverParent.id,
+    });
+    const liveComment = await createTestComment({
+      authorId: author.id,
+      postId: adminPost.id,
+    });
+    await prisma.comment.updateMany({
+      where: { id: { in: [leftoverParent.id, leftoverChild.id] } },
+      data: { body: "", deletedAt: now, authorId: null },
+    });
+
+    const result = await deleteExpiredDemoUsers(now);
+
+    expect(result).toMatchObject({ deletedComments: 2 });
+    expect(await prisma.comment.findMany({ select: { id: true } })).toEqual([
+      { id: liveComment.id },
+    ]);
+  });
+
   it("keeps admins, readers and fresh demo users", async () => {
     const admin = await createTestUser({ role: "ADMIN" });
     const reader = await createTestUser({ role: "USER" });

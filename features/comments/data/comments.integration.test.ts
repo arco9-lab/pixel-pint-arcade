@@ -241,6 +241,282 @@ describe("comment data functions", () => {
     await expect(deleteComment(adminDeletedComment.id)).resolves.toBeUndefined();
   });
 
+  it("deletes a comment without replies completely", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const user = await signIn();
+    const comment = await createTestComment({
+      authorId: user.id,
+      postId: post.id,
+    });
+
+    await deleteComment(comment.id);
+
+    expect(await prisma.comment.count()).toBe(0);
+  });
+
+  it("turns a comment with replies into a tombstone", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const replier = await createTestUser();
+    const user = await signIn();
+    const comment = await createTestComment({
+      authorId: user.id,
+      postId: post.id,
+      body: "Original text",
+    });
+    const reply = await createTestComment({
+      authorId: replier.id,
+      postId: post.id,
+      parentId: comment.id,
+      body: "Reply text",
+    });
+
+    await deleteComment(comment.id);
+
+    await expect(
+      prisma.comment.findUniqueOrThrow({ where: { id: comment.id } }),
+    ).resolves.toMatchObject({
+      body: "",
+      authorId: user.id,
+      deletedAt: expect.any(Date),
+    });
+    await expect(
+      prisma.comment.findUniqueOrThrow({ where: { id: reply.id } }),
+    ).resolves.toMatchObject({ body: "Reply text", parentId: comment.id });
+
+    const comments = await getCommentsForPost(post.id);
+
+    expect(comments).toHaveLength(2);
+    expect(comments.find((item) => item.id === comment.id)).toMatchObject({
+      body: "",
+      author: null,
+      deleted: true,
+    });
+    expect(comments.find((item) => item.id === reply.id)).toMatchObject({
+      body: "Reply text",
+      author: { id: replier.id },
+      deleted: false,
+    });
+  });
+
+  it("lets an admin delete a foreign comment while keeping its replies", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const author = await createTestUser();
+    const replier = await createTestUser();
+    const comment = await createTestComment({
+      authorId: author.id,
+      postId: post.id,
+    });
+    const reply = await createTestComment({
+      authorId: replier.id,
+      postId: post.id,
+      parentId: comment.id,
+    });
+    authMock.currentUser = admin;
+
+    await deleteComment(comment.id);
+
+    await expect(
+      prisma.comment.findUniqueOrThrow({ where: { id: comment.id } }),
+    ).resolves.toMatchObject({ body: "", deletedAt: expect.any(Date) });
+    await expect(
+      prisma.comment.findUnique({ where: { id: reply.id } }),
+    ).resolves.not.toBeNull();
+  });
+
+  it("removes a tombstone together with its last reply", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const author = await createTestUser();
+    const replier = await createTestUser();
+    const comment = await createTestComment({
+      authorId: author.id,
+      postId: post.id,
+    });
+    const reply = await createTestComment({
+      authorId: replier.id,
+      postId: post.id,
+      parentId: comment.id,
+    });
+    authMock.currentUser = author;
+    await deleteComment(comment.id);
+    authMock.currentUser = replier;
+
+    await deleteComment(reply.id);
+
+    expect(await prisma.comment.count()).toBe(0);
+  });
+
+  it("removes a whole chain of tombstones when its last leaf is deleted", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const rootAuthor = await createTestUser();
+    const middleAuthor = await createTestUser();
+    const leafAuthor = await createTestUser();
+    const root = await createTestComment({
+      authorId: rootAuthor.id,
+      postId: post.id,
+    });
+    const middle = await createTestComment({
+      authorId: middleAuthor.id,
+      postId: post.id,
+      parentId: root.id,
+    });
+    const leaf = await createTestComment({
+      authorId: leafAuthor.id,
+      postId: post.id,
+      parentId: middle.id,
+    });
+    authMock.currentUser = rootAuthor;
+    await deleteComment(root.id);
+    authMock.currentUser = middleAuthor;
+    await deleteComment(middle.id);
+
+    expect(await prisma.comment.count()).toBe(3);
+
+    authMock.currentUser = leafAuthor;
+    await deleteComment(leaf.id);
+
+    expect(await prisma.comment.count()).toBe(0);
+  });
+
+  it("keeps a tombstone while it still has other replies", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const author = await createTestUser();
+    const firstReplier = await createTestUser();
+    const secondReplier = await createTestUser();
+    const comment = await createTestComment({
+      authorId: author.id,
+      postId: post.id,
+    });
+    const firstReply = await createTestComment({
+      authorId: firstReplier.id,
+      postId: post.id,
+      parentId: comment.id,
+    });
+    await createTestComment({
+      authorId: secondReplier.id,
+      postId: post.id,
+      parentId: comment.id,
+    });
+    authMock.currentUser = author;
+    await deleteComment(comment.id);
+    authMock.currentUser = firstReplier;
+
+    await deleteComment(firstReply.id);
+
+    expect(await prisma.comment.count()).toBe(2);
+    await expect(
+      prisma.comment.findUnique({ where: { id: comment.id } }),
+    ).resolves.not.toBeNull();
+  });
+
+  it("reports a deleted comment as not found", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const replier = await createTestUser();
+    const user = await signIn();
+    const comment = await createTestComment({
+      authorId: user.id,
+      postId: post.id,
+    });
+    await createTestComment({
+      authorId: replier.id,
+      postId: post.id,
+      parentId: comment.id,
+    });
+    await deleteComment(comment.id);
+
+    await expect(deleteComment(comment.id)).rejects.toThrow("Comment not found");
+  });
+
+  it("rejects replies to a tombstone", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const replier = await createTestUser();
+    const author = await signIn();
+    const comment = await createTestComment({
+      authorId: author.id,
+      postId: post.id,
+    });
+    await createTestComment({
+      authorId: replier.id,
+      postId: post.id,
+      parentId: comment.id,
+    });
+    await deleteComment(comment.id);
+    const newcomer = await signIn();
+
+    await expect(
+      createComment({
+        postId: post.id,
+        parentId: comment.id,
+        body: `Reply from ${newcomer.id}`,
+      }),
+    ).rejects.toThrow("Parent comment not found");
+  });
+
+  it("hides tombstones from the current user's comments", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const replier = await createTestUser();
+    const user = await signIn();
+    const deleted = await createTestComment({
+      authorId: user.id,
+      postId: post.id,
+      body: "Deleted with reply",
+    });
+    await createTestComment({
+      authorId: replier.id,
+      postId: post.id,
+      parentId: deleted.id,
+    });
+    await createTestComment({
+      authorId: user.id,
+      postId: post.id,
+      body: "Still visible",
+    });
+    await deleteComment(deleted.id);
+
+    const comments = await getCurrentUserComments();
+
+    expect(comments.map((comment) => comment.body)).toEqual(["Still visible"]);
+  });
+
+  it("never loses a reply posted while its parent is being deleted", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const parentAuthor = await createTestUser();
+    const replier = await createTestUser();
+    const parent = await createTestComment({
+      authorId: parentAuthor.id,
+      postId: post.id,
+    });
+    await Promise.all(
+      Array.from({ length: 5 }, () => prisma.$queryRaw`SELECT 1`),
+    );
+
+    authMock.currentUser = parentAuthor;
+    const deletion = deleteComment(parent.id);
+    authMock.currentUser = replier;
+    const reply = createComment({
+      postId: post.id,
+      parentId: parent.id,
+      body: "Racing reply",
+    });
+
+    const [, replyResult] = await Promise.allSettled([deletion, reply]);
+
+    if (replyResult.status === "fulfilled") {
+      await expect(
+        prisma.comment.findUnique({ where: { id: replyResult.value.id } }),
+      ).resolves.not.toBeNull();
+    }
+  });
+
   it("rejects non-owners when deleting comments", async () => {
     const admin = await createTestUser({ role: "ADMIN" });
     const post = await createTestPost({ authorId: admin.id });

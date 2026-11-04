@@ -1,0 +1,6 @@
+ALTER TABLE "Comment" DROP CONSTRAINT "Comment_authorId_fkey";
+
+ALTER TABLE "Comment" ADD COLUMN     "deletedAt" TIMESTAMP(3),
+ALTER COLUMN "authorId" DROP NOT NULL;
+
+ALTER TABLE "Comment" ADD CONSTRAINT "Comment_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "user"("id") ON DELETE SET NULL ON UPDATE CASCADE;

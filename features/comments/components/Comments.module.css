@@ -184,6 +184,11 @@
   text-transform: uppercase;
 }
 
+.commentHeader .deletedLabel {
+  color: #8f7bb0;
+  font-style: italic;
+}
+
 .commentHeader time {
   color: var(--green);
   font-size: 13px;
