@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AuthPanel } from "@/features/auth/components/AuthPanel";
+import { isDemoMode } from "@/lib/demo-mode";
 import { getCurrentSession } from "@/server/auth";
 
 const googleEnabled =
@@ -10,6 +11,10 @@ const googleEnabled =
   !process.env.GOOGLE_CLIENT_SECRET?.startsWith("replace-");
 
 export default async function RegisterPage() {
+  if (isDemoMode()) {
+    redirect("/login");
+  }
+
   const session = await getCurrentSession();
 
   if (session?.user) {

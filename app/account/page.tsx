@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { DemoAccountBanner } from "@/features/demo/components/DemoAccountBanner";
 import { SignOutButton } from "@/features/auth/components/SignOutButton";
 import { DeletePostButton } from "@/features/blog/components/DeletePostButton";
 import { getCurrentSession } from "@/server/auth";
@@ -55,6 +56,8 @@ export default async function AccountPage() {
           </div>
           <SignOutButton className={`pixel-link ${styles.signOut}`} />
         </section>
+
+        {user.role === "DEMO" ? <DemoAccountBanner /> : null}
 
         <nav className={styles.tabs} aria-label="Account sections">
           {isAdmin ? <Link href="/admin/posts/new">Write post</Link> : null}

@@ -11,6 +11,8 @@ if (!process.env.DATABASE_URL?.includes("_test")) {
   throw new Error("Integration tests must use a test database");
 }
 
+process.env.DATABASE_URL_UNPOOLED = process.env.DATABASE_URL;
+
 const result = spawnSync("npx", ["prisma", "migrate", "deploy"], {
   env: process.env,
   stdio: "inherit",

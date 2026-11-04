@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { isDemoMode } from "@/lib/demo-mode";
 import type { CommentDTO } from "@/features/comments/types";
 import { CommentForm } from "./CommentForm";
 import { CommentThreadItem } from "./CommentThreadItem";
@@ -78,9 +79,11 @@ export const CommentsSection = ({
             <Link className="btn" href="/login">
               Sign in
             </Link>
-            <Link className="btn secondary" href="/register">
-              Create account
-            </Link>
+            {isDemoMode() ? null : (
+              <Link className="btn secondary" href="/register">
+                Create account
+              </Link>
+            )}
           </div>
         </div>
       ) : (

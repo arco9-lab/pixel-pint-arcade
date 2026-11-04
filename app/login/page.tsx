@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AuthPanel } from "@/features/auth/components/AuthPanel";
+import { isDemoMode } from "@/lib/demo-mode";
 import { getCurrentSession } from "@/server/auth";
 
 const googleEnabled =
@@ -16,5 +17,11 @@ export default async function LoginPage() {
     redirect("/account");
   }
 
-  return <AuthPanel mode="sign-in" googleEnabled={googleEnabled} />;
+  return (
+    <AuthPanel
+      mode="sign-in"
+      googleEnabled={googleEnabled}
+      demoMode={isDemoMode()}
+    />
+  );
 }
