@@ -1,9 +1,16 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { upload } from "@vercel/blob/client";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 
 import { createPostAction, updatePostAction } from "@/features/blog/actions/posts";
 import type { ActionState } from "@/lib/action-state";
+import {
+  COVER_BLOB_PATH_PREFIX,
+  COVER_IMAGE_CONTENT_TYPES,
+  COVER_IMAGE_MAX_BYTES,
+  type CoverUploadMode,
+} from "@/features/blog/cover-image";
 import { parseArticleContent } from "@/features/blog/data/article-content";
 import { ArticleBody } from "./ArticleBody";
 import { PostCoverImage } from "./PostCoverImage";
@@ -39,6 +46,7 @@ const parseTagPreview = (value: string) => {
 };
 
 type PostEditorFieldsProps = {
+  coverUploadMode: CoverUploadMode;
   initialValues: PostEditorInitialValues;
   mode: PostEditorMode;
   pending: boolean;
@@ -78,6 +86,7 @@ const emptyInitialValues: PostEditorInitialValues = {
 };
 
 const PostEditorFields = ({
+  coverUploadMode,
   initialValues,
   mode,
   pending,
@@ -96,6 +105,10 @@ const PostEditorFields = ({
   const [coverFileName, setCoverFileName] = useState("");
   const [coverPreviewUrl, setCoverPreviewUrl] = useState("");
   const [removeCoverImage, setRemoveCoverImage] = useState(false);
+  const [uploadedCoverUrl, setUploadedCoverUrl] = useState("");
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState("");
+  const latestUploadId = useRef(0);
   const [tags, setTags] = useState(initialValues.tags);
   const [content, setContent] = useState(initialValues.content);
   const [slugEdited, setSlugEdited] = useState(mode === "edit");
@@ -105,7 +118,12 @@ const PostEditorFields = ({
   const previewCoverSrc =
     coverPreviewUrl || (removeCoverImage ? "" : initialValues.coverImageUrl);
   const tabErrors = {
-    cover: Boolean(state.errors?.coverImageAlt || state.errors?.coverImageFile),
+    cover: Boolean(
+      uploadError ||
+        state.errors?.coverImageAlt ||
+        state.errors?.coverImageFile ||
+        state.errors?.coverImageUrl,
+    ),
     post: Boolean(
       state.errors?.content ||
         state.errors?.excerpt ||
@@ -140,9 +158,65 @@ const PostEditorFields = ({
     setSlugEdited(true);
   };
 
+  const startCoverUpload = async (file: File) => {
+    const uploadId = latestUploadId.current + 1;
+    latestUploadId.current = uploadId;
+    const isLatestUpload = () => latestUploadId.current === uploadId;
+
+    setUploadedCoverUrl("");
+    setUploadError("");
+
+    if (!COVER_IMAGE_CONTENT_TYPES.includes(file.type)) {
+      setUploadError("Upload a PNG, JPG, WebP, or GIF image.");
+      return;
+    }
+
+    if (file.size > COVER_IMAGE_MAX_BYTES) {
+      setUploadError("Cover image must be 5MB or smaller.");
+      return;
+    }
+
+    setUploadProgress(0);
+
+    try {
+      const blob = await upload(`${COVER_BLOB_PATH_PREFIX}${file.name}`, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob/cover-upload",
+        onUploadProgress: ({ percentage }) => {
+          if (isLatestUpload()) {
+            setUploadProgress(Math.round(percentage));
+          }
+        },
+      });
+
+      if (isLatestUpload()) {
+        setUploadedCoverUrl(blob.url);
+      }
+    } catch {
+      if (isLatestUpload()) {
+        setUploadError("Cover upload failed. Try again.");
+      }
+    } finally {
+      if (isLatestUpload()) {
+        setUploadProgress(null);
+      }
+    }
+  };
+
   const handleCoverFileChange = (file?: File) => {
     setCoverFileName(file?.name ?? "");
     setRemoveCoverImage(false);
+
+    if (coverUploadMode === "blob") {
+      if (file) {
+        void startCoverUpload(file);
+      } else {
+        latestUploadId.current += 1;
+        setUploadedCoverUrl("");
+        setUploadError("");
+        setUploadProgress(null);
+      }
+    }
 
     setCoverPreviewUrl((currentUrl) => {
       if (currentUrl) {
@@ -358,7 +432,7 @@ const PostEditorFields = ({
             accept="image/gif,image/jpeg,image/png,image/webp"
             className={styles.fileInput}
             id="coverImageFile"
-            name="coverImageFile"
+            name={coverUploadMode === "form" ? "coverImageFile" : undefined}
             onChange={(event) => handleCoverFileChange(event.target.files?.[0])}
             type="file"
           />
@@ -368,8 +442,25 @@ const PostEditorFields = ({
           <span className={styles.fileName}>
             {coverFileName || "No image selected"}
           </span>
+          {coverUploadMode === "blob" ? (
+            <input name="coverImageUrl" type="hidden" value={uploadedCoverUrl} />
+          ) : null}
+          {uploadProgress !== null ? (
+            <span className={styles.fileName} role="status">
+              Uploading... {uploadProgress}%
+            </span>
+          ) : null}
+          {uploadedCoverUrl ? (
+            <span className={styles.fileName} role="status">
+              Cover uploaded.
+            </span>
+          ) : null}
+          {uploadError ? <p>{uploadError}</p> : null}
           {state.errors?.coverImageFile ? (
             <p>{state.errors.coverImageFile[0]}</p>
+          ) : null}
+          {state.errors?.coverImageUrl ? (
+            <p>{state.errors.coverImageUrl[0]}</p>
           ) : null}
           {initialValues.coverImageUrl ? (
             <div className={styles.coverPreview}>
@@ -441,7 +532,11 @@ const PostEditorFields = ({
       </section>
 
       <div className={styles.actions}>
-        <button className="btn" type="submit" disabled={pending}>
+        <button
+          className="btn"
+          type="submit"
+          disabled={pending || uploadProgress !== null}
+        >
           {pending
             ? "Saving..."
             : mode === "edit"
@@ -460,11 +555,13 @@ const PostEditorFields = ({
 };
 
 type PostEditorFormProps = {
+  coverUploadMode?: CoverUploadMode;
   initialValues?: PostEditorInitialValues;
   mode?: PostEditorMode;
 };
 
 export const PostEditorForm = ({
+  coverUploadMode = "form",
   initialValues = emptyInitialValues,
   mode = "create",
 }: PostEditorFormProps) => {
@@ -479,6 +576,7 @@ export const PostEditorForm = ({
             ? state.resetKey ?? "draft"
             : initialValues.id ?? "edit"
         }
+        coverUploadMode={coverUploadMode}
         initialValues={initialValues}
         mode={mode}
         pending={pending}

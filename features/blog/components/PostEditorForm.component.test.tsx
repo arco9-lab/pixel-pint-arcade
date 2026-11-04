@@ -1,16 +1,25 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   queueActionState,
   resetActionStateMock,
 } from "@/tests/component/action-state";
+const blobClientMock = vi.hoisted(() => ({
+  upload: vi.fn(),
+}));
+
+vi.mock("@vercel/blob/client", () => ({
+  upload: blobClientMock.upload,
+}));
+
 import { PostEditorForm } from "@/features/blog/components/PostEditorForm";
 
 describe("PostEditorForm", () => {
   beforeEach(() => {
     resetActionStateMock();
+    blobClientMock.upload.mockReset();
   });
 
   it("generates a slug from the title until the slug is edited", async () => {
@@ -68,5 +77,114 @@ describe("PostEditorForm", () => {
     expect(screen.getByText("Title is required.")).toBeInTheDocument();
     expect(screen.getByText("Could not create the post.")).toBeInTheDocument();
     expect(screen.getAllByLabelText("Has errors")).toHaveLength(2);
+  });
+
+  describe("cover upload", () => {
+    const coverFile = (name = "cover.png", type = "image/png") =>
+      new File(["pixels"], name, { type });
+
+    const coverFileInput = () =>
+      document.getElementById("coverImageFile") as HTMLInputElement;
+
+    const hiddenCoverUrl = (container: HTMLElement) =>
+      container.querySelector<HTMLInputElement>('input[name="coverImageUrl"]');
+
+    it("posts the file with the form in form mode", async () => {
+      const user = userEvent.setup();
+      const { container } = render(<PostEditorForm />);
+
+      await user.click(screen.getByRole("tab", { name: "Cover" }));
+
+      expect(coverFileInput()).toHaveAttribute("name", "coverImageFile");
+      expect(hiddenCoverUrl(container)).toBeNull();
+    });
+
+    it("uploads straight to Blob and stores the url in blob mode", async () => {
+      const user = userEvent.setup();
+      let finishUpload: (value: { url: string }) => void = () => undefined;
+      blobClientMock.upload.mockReturnValue(
+        new Promise((resolve) => {
+          finishUpload = resolve;
+        }),
+      );
+      const { container } = render(<PostEditorForm coverUploadMode="blob" />);
+
+      await user.click(screen.getByRole("tab", { name: "Cover" }));
+
+      expect(coverFileInput()).not.toHaveAttribute("name");
+
+      await user.upload(coverFileInput(), coverFile());
+
+      expect(blobClientMock.upload).toHaveBeenCalledWith(
+        "posts/cover.png",
+        expect.any(File),
+        expect.objectContaining({
+          access: "public",
+          handleUploadUrl: "/api/blob/cover-upload",
+        }),
+      );
+      expect(screen.getByText(/Uploading/)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save post" })).toBeDisabled();
+
+      finishUpload({
+        url: "https://store.public.blob.vercel-storage.com/posts/cover-x.png",
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText("Cover uploaded.")).toBeInTheDocument();
+      });
+      expect(hiddenCoverUrl(container)).toHaveValue(
+        "https://store.public.blob.vercel-storage.com/posts/cover-x.png",
+      );
+      expect(screen.getByRole("button", { name: "Save post" })).toBeEnabled();
+    });
+
+    it("shows an error and keeps the url empty when the upload fails", async () => {
+      const user = userEvent.setup();
+      blobClientMock.upload.mockRejectedValue(new Error("network"));
+      const { container } = render(<PostEditorForm coverUploadMode="blob" />);
+
+      await user.click(screen.getByRole("tab", { name: "Cover" }));
+      await user.upload(coverFileInput(), coverFile());
+
+      await waitFor(() => {
+        expect(
+          screen.getByText("Cover upload failed. Try again."),
+        ).toBeInTheDocument();
+      });
+      expect(hiddenCoverUrl(container)).toHaveValue("");
+      expect(screen.getByRole("button", { name: "Save post" })).toBeEnabled();
+    });
+
+    it("rejects unsupported files without uploading", async () => {
+      const user = userEvent.setup({ applyAccept: false });
+      render(<PostEditorForm coverUploadMode="blob" />);
+
+      await user.click(screen.getByRole("tab", { name: "Cover" }));
+      await user.upload(
+        coverFileInput(),
+        coverFile("notes.pdf", "application/pdf"),
+      );
+
+      expect(
+        screen.getByText("Upload a PNG, JPG, WebP, or GIF image."),
+      ).toBeInTheDocument();
+      expect(blobClientMock.upload).not.toHaveBeenCalled();
+    });
+
+    it("rejects files over 5MB without uploading", async () => {
+      const user = userEvent.setup();
+      render(<PostEditorForm coverUploadMode="blob" />);
+      const largeFile = coverFile();
+      Object.defineProperty(largeFile, "size", { value: 5 * 1024 * 1024 + 1 });
+
+      await user.click(screen.getByRole("tab", { name: "Cover" }));
+      await user.upload(coverFileInput(), largeFile);
+
+      expect(
+        screen.getByText("Cover image must be 5MB or smaller."),
+      ).toBeInTheDocument();
+      expect(blobClientMock.upload).not.toHaveBeenCalled();
+    });
   });
 });

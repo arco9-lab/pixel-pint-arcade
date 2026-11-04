@@ -175,10 +175,13 @@ describe("blog post data functions", () => {
     ).resolves.toEqual({
       previousSlug: "admin-post",
       slug: "updated-admin-post",
+      previousCoverImageUrl: null,
+      coverImageUrl: null,
     });
 
     await expect(deletePost(createdPost.id)).resolves.toEqual({
       slug: "updated-admin-post",
+      coverImageUrl: null,
     });
     await expect(
       prisma.post.findUnique({ where: { id: createdPost.id } }),

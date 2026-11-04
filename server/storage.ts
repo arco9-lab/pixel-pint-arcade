@@ -4,7 +4,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 
-const MAX_COVER_IMAGE_SIZE = 5 * 1024 * 1024;
+import { COVER_IMAGE_MAX_BYTES } from "@/features/blog/cover-image";
+
 const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "posts");
 const PUBLIC_UPLOAD_DIR = "/uploads/posts";
 
@@ -28,7 +29,7 @@ export const savePostCoverImage = async (
     throw new Error("InvalidCoverImageType");
   }
 
-  if (value.size > MAX_COVER_IMAGE_SIZE) {
+  if (value.size > COVER_IMAGE_MAX_BYTES) {
     throw new Error("CoverImageTooLarge");
   }
 

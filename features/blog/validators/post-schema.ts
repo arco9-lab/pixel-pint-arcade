@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { isAllowedCoverImageUrl } from "@/features/blog/cover-image";
+
 export const postSchema = z.object({
   title: z.string().trim().min(1).max(160),
   slug: z
@@ -9,7 +11,13 @@ export const postSchema = z.object({
     .max(180)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   excerpt: z.string().trim().max(300).nullable().optional(),
-  coverImageUrl: z.string().trim().url().max(1000).nullable().optional(),
+  coverImageUrl: z
+    .string()
+    .trim()
+    .max(1000)
+    .refine(isAllowedCoverImageUrl)
+    .nullable()
+    .optional(),
   coverImageAlt: z.string().trim().max(180).nullable().optional(),
   seoTitle: z.string().trim().max(160).nullable().optional(),
   seoDescription: z.string().trim().max(300).nullable().optional(),

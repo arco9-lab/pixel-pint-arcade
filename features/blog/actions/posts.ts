@@ -13,6 +13,7 @@ import {
   updatePost,
 } from "@/features/blog/data/posts";
 import { requireAdmin } from "@/server/permissions";
+import { deleteCoverImageBlob } from "@/server/blob-storage";
 import { savePostCoverImage } from "@/server/storage";
 import type { ActionState } from "@/lib/action-state";
 
@@ -62,6 +63,7 @@ export async function createPostAction(
     title: formData.get("title"),
     slug: formData.get("slug"),
     excerpt: nullableStringFromForm(formData.get("excerpt")),
+    coverImageUrl: nullableStringFromForm(formData.get("coverImageUrl")),
     coverImageAlt: nullableStringFromForm(formData.get("coverImageAlt")),
     seoTitle: nullableStringFromForm(formData.get("seoTitle")),
     seoDescription: nullableStringFromForm(formData.get("seoDescription")),
@@ -80,13 +82,13 @@ export async function createPostAction(
 
   try {
     await requireAdmin();
-    const coverImageUrl = await savePostCoverImage(
+    const uploadedCoverImageUrl = await savePostCoverImage(
       formData.get("coverImageFile"),
     );
 
     await createPost({
       ...parsed.data,
-      coverImageUrl: coverImageUrl ?? null,
+      coverImageUrl: parsed.data.coverImageUrl ?? uploadedCoverImageUrl ?? null,
     });
     revalidatePath("/");
     revalidatePath("/account");
@@ -121,6 +123,7 @@ export async function updatePostAction(
     title: formData.get("title"),
     slug: formData.get("slug"),
     excerpt: nullableStringFromForm(formData.get("excerpt")),
+    coverImageUrl: nullableStringFromForm(formData.get("coverImageUrl")),
     coverImageAlt: nullableStringFromForm(formData.get("coverImageAlt")),
     seoTitle: nullableStringFromForm(formData.get("seoTitle")),
     seoDescription: nullableStringFromForm(formData.get("seoDescription")),
@@ -138,7 +141,11 @@ export async function updatePostAction(
   }
 
   try {
-    const { postId, ...postInput } = parsed.data;
+    const {
+      postId,
+      coverImageUrl: submittedCoverImageUrl,
+      ...postInput
+    } = parsed.data;
     await requireAdmin();
     const uploadedCoverImageUrl = await savePostCoverImage(
       formData.get("coverImageFile"),
@@ -146,11 +153,16 @@ export async function updatePostAction(
     const removeCoverImage = booleanFromForm(formData.get("removeCoverImage"));
     const coverImageUrl = removeCoverImage
       ? null
-      : uploadedCoverImageUrl;
+      : (submittedCoverImageUrl ?? uploadedCoverImageUrl);
     const updatedPost = await updatePost(postId, {
       ...postInput,
       ...(coverImageUrl !== undefined ? { coverImageUrl } : {}),
     });
+
+    if (updatedPost.previousCoverImageUrl !== updatedPost.coverImageUrl) {
+      await deleteCoverImageBlob(updatedPost.previousCoverImageUrl);
+    }
+
     revalidatePath("/");
     revalidatePath("/account");
     revalidatePath("/blog");
@@ -197,6 +209,7 @@ export async function deletePostAction(
 
   try {
     const deletedPost = await deletePost(parsed.data.postId);
+    await deleteCoverImageBlob(deletedPost.coverImageUrl);
     revalidatePath("/");
     revalidatePath("/account");
     revalidatePath("/blog");

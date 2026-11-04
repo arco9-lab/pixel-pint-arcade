@@ -304,7 +304,7 @@ export const updatePost = async (
   const tags = tagConnectOrCreate(input.tags);
   const currentPost = await prisma.post.findUnique({
     where: { id: postId },
-    select: { slug: true },
+    select: { slug: true, coverImageUrl: true },
   });
 
   if (!currentPost) {
@@ -333,12 +333,14 @@ export const updatePost = async (
           }
         : {}),
     },
-    select: { slug: true },
+    select: { slug: true, coverImageUrl: true },
   });
 
   return {
     previousSlug: currentPost.slug,
     slug: updatedPost.slug,
+    previousCoverImageUrl: currentPost.coverImageUrl,
+    coverImageUrl: updatedPost.coverImageUrl,
   };
 };
 
@@ -347,10 +349,11 @@ export const deletePost = async (postId: string) => {
 
   const deletedPost = await prisma.post.delete({
     where: { id: postId },
-    select: { slug: true },
+    select: { slug: true, coverImageUrl: true },
   });
 
   return {
     slug: deletedPost.slug,
+    coverImageUrl: deletedPost.coverImageUrl,
   };
 };
