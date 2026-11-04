@@ -1,4 +1,6 @@
 {
+  "buildCommand": "npm run build:vercel",
+  "regions": ["fra1"],
   "crons": [
     {
       "path": "/api/cron/demo-cleanup",
