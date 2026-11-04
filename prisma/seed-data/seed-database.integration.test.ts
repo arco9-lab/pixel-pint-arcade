@@ -4,6 +4,7 @@ import { prisma } from "@/db/prisma";
 import { createTestPost, createTestUser } from "@/tests/integration/factories";
 import { seedPosts } from "./posts";
 import { seedReaders } from "./readers";
+import type { SeedComment } from "./types";
 import { seedDatabase } from "./seed-database";
 
 const admin = {
@@ -11,6 +12,12 @@ const admin = {
   name: "Seed Admin",
   password: "seed-admin-password",
 };
+
+const countComments = (comments: SeedComment[]): number =>
+  comments.reduce(
+    (total, comment) => total + 1 + countComments(comment.replies ?? []),
+    0,
+  );
 
 const countRecords = async () => ({
   users: await prisma.user.count(),
@@ -104,5 +111,82 @@ describe("seedDatabase", () => {
     });
 
     expect(stillThere?.role).toBe("DEMO");
+  });
+
+  it("creates the comments, replies and likes from the seed data", async () => {
+    await seedDatabase(prisma, admin);
+
+    const publishedPosts = seedPosts.filter((post) => post.published);
+
+    expect(await prisma.comment.count()).toBe(
+      publishedPosts.reduce(
+        (total, post) => total + countComments(post.comments),
+        0,
+      ),
+    );
+    expect(await prisma.postLike.count()).toBe(
+      publishedPosts.reduce((total, post) => total + post.likes.length, 0),
+    );
+    expect(
+      await prisma.comment.count({ where: { parentId: { not: null } } }),
+    ).toBeGreaterThan(0);
+  });
+
+  it("attributes comments to the admin and the readers", async () => {
+    await seedDatabase(prisma, admin);
+
+    const adminUser = await prisma.user.findUniqueOrThrow({
+      where: { email: admin.email },
+    });
+    const authors = new Set(
+      (await prisma.comment.findMany({ select: { authorId: true } })).map(
+        (comment) => comment.authorId,
+      ),
+    );
+
+    expect(authors.has(adminUser.id)).toBe(true);
+    expect(authors.size).toBeGreaterThan(1);
+  });
+
+  it("sets cover images and dates relative to the run date", async () => {
+    const now = new Date("2026-11-04T09:30:00.000Z");
+
+    await seedDatabase(prisma, admin, now);
+
+    for (const seedPost of seedPosts) {
+      const post = await prisma.post.findUniqueOrThrow({
+        where: { slug: seedPost.slug },
+      });
+      const expectedCreatedAt =
+        Date.UTC(2026, 10, 4, 12) - seedPost.daysAgo * 24 * 60 * 60 * 1000;
+
+      expect(post.createdAt.getTime()).toBe(expectedCreatedAt);
+      expect(post.coverImageUrl).toBe(
+        seedPost.coverFile ? `/demo/covers/${seedPost.coverFile}` : null,
+      );
+
+      if (seedPost.updatedDaysAgo !== null) {
+        expect(post.updatedAt.getTime()).toBeGreaterThan(
+          post.createdAt.getTime(),
+        );
+      } else {
+        expect(post.updatedAt.getTime()).toBe(post.createdAt.getTime());
+      }
+    }
+  });
+
+  it("keeps comments after the posts are re-seeded with the same ids", async () => {
+    await seedDatabase(prisma, admin);
+    const commentIds = (await prisma.comment.findMany({ select: { id: true } }))
+      .map((comment) => comment.id)
+      .sort();
+
+    await seedDatabase(prisma, admin);
+
+    expect(
+      (await prisma.comment.findMany({ select: { id: true } }))
+        .map((comment) => comment.id)
+        .sort(),
+    ).toEqual(commentIds);
   });
 });

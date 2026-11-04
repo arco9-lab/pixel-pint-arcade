@@ -2,11 +2,8 @@ import { hashPassword } from "better-auth/crypto";
 
 import type { PrismaClient } from "../../app/generated/prisma/client";
 import { seedPosts } from "./posts";
-import {
-  seedCommentBodies,
-  seedReaders,
-  seedReplyBodies,
-} from "./readers";
+import { SEED_ADMIN_ALIAS, seedReaders } from "./readers";
+import type { SeedComment } from "./types";
 
 export type SeedAdminInput = {
   email: string;
@@ -21,8 +18,27 @@ const slugifyTag = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+const HOUR_IN_MILLISECONDS = 60 * 60 * 1000;
+const DAY_IN_MILLISECONDS = 24 * HOUR_IN_MILLISECONDS;
+const COMMENT_SPACING_HOURS = 5;
+
 const hoursAfter = (date: Date, hours: number) =>
-  new Date(date.getTime() + hours * 60 * 60 * 1000);
+  new Date(date.getTime() + hours * HOUR_IN_MILLISECONDS);
+
+const daysBefore = (now: Date, days: number) =>
+  new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 12) -
+      days * DAY_IN_MILLISECONDS,
+  );
+
+const flattenComments = (
+  comments: SeedComment[],
+  parentKey: string | null = null,
+): { comment: SeedComment; parentKey: string | null }[] =>
+  comments.flatMap((comment) => [
+    { comment, parentKey },
+    ...flattenComments(comment.replies ?? [], comment.key),
+  ]);
 
 async function seedAdmin(prisma: PrismaClient, admin: SeedAdminInput) {
   const user = await prisma.user.upsert({
@@ -72,7 +88,11 @@ async function seedReaderUsers(prisma: PrismaClient) {
   );
 }
 
-async function seedPostRecords(prisma: PrismaClient, authorId: string) {
+async function seedPostRecords(
+  prisma: PrismaClient,
+  authorId: string,
+  now: Date,
+) {
   const tagNames = new Map<string, string>();
 
   seedPosts.forEach((post) =>
@@ -90,14 +110,19 @@ async function seedPostRecords(prisma: PrismaClient, authorId: string) {
   );
 
   return Promise.all(
-    seedPosts.map((post) => {
-      const createdAt = new Date(post.createdAt);
-      const updatedAt = post.updatedAt ? new Date(post.updatedAt) : createdAt;
+    seedPosts.map(async (post) => {
+      const createdAt = daysBefore(now, post.daysAgo);
+      const updatedAt =
+        post.updatedDaysAgo === null
+          ? createdAt
+          : daysBefore(now, post.updatedDaysAgo);
       const data = {
         title: post.title,
         excerpt: post.excerpt,
         content: post.content,
-        coverImageUrl: post.coverImageUrl,
+        coverImageUrl: post.coverFile
+          ? `/demo/covers/${post.coverFile}`
+          : null,
         coverImageAlt: post.coverImageAlt,
         seoTitle: post.seoTitle,
         seoDescription: post.seoDescription,
@@ -110,7 +135,7 @@ async function seedPostRecords(prisma: PrismaClient, authorId: string) {
         },
       };
 
-      return prisma.post.upsert({
+      const record = await prisma.post.upsert({
         where: { slug: post.slug },
         update: data,
         create: {
@@ -122,6 +147,8 @@ async function seedPostRecords(prisma: PrismaClient, authorId: string) {
           },
         },
       });
+
+      return { post, record };
     }),
   );
 }
@@ -129,87 +156,80 @@ async function seedPostRecords(prisma: PrismaClient, authorId: string) {
 async function seedEngagement(
   prisma: PrismaClient,
   posts: Awaited<ReturnType<typeof seedPostRecords>>,
-  readerIds: string[],
+  userIdByAlias: Map<string, string>,
+  now: Date,
 ) {
-  const publishedPosts = posts.filter((post) => post.published);
+  const resolveUserId = (alias: string) => {
+    const userId = userIdByAlias.get(alias);
 
-  for (const [postIndex, post] of publishedPosts.entries()) {
-    for (const [readerIndex, readerId] of readerIds.entries()) {
-      if ((postIndex + readerIndex) % 2 === 0) {
-        await prisma.postLike.upsert({
-          where: { id: `seed-like-${postIndex}-${readerIndex}` },
-          update: {},
-          create: {
-            id: `seed-like-${postIndex}-${readerIndex}`,
-            postId: post.id,
-            userId: readerId,
-            createdAt: hoursAfter(post.createdAt, 2 + readerIndex),
-          },
-        });
-      }
-
-      if ((postIndex + readerIndex) % 3 === 0) {
-        await prisma.postBookmark.upsert({
-          where: { id: `seed-bookmark-${postIndex}-${readerIndex}` },
-          update: {},
-          create: {
-            id: `seed-bookmark-${postIndex}-${readerIndex}`,
-            postId: post.id,
-            userId: readerId,
-            createdAt: hoursAfter(post.createdAt, 3 + readerIndex),
-          },
-        });
-      }
+    if (!userId) {
+      throw new Error(`Unknown seed user "${alias}"`);
     }
 
-    if (!post.commentsEnabled) {
+    return userId;
+  };
+
+  for (const { post, record } of posts) {
+    if (!post.published) {
       continue;
     }
 
-    const rootId = `seed-comment-${postIndex}-root`;
-    const rootAuthorId = readerIds[postIndex % readerIds.length];
-    const rootCreatedAt = hoursAfter(post.createdAt, 5);
+    for (const [likeIndex, alias] of post.likes.entries()) {
+      const id = `seed-like-${post.number}-${alias}`;
 
-    await prisma.comment.upsert({
-      where: { id: rootId },
-      update: {},
-      create: {
-        id: rootId,
-        postId: post.id,
-        authorId: rootAuthorId,
-        body: seedCommentBodies[postIndex % seedCommentBodies.length],
-        createdAt: rootCreatedAt,
-      },
-    });
+      await prisma.postLike.upsert({
+        where: { id },
+        update: {},
+        create: {
+          id,
+          postId: record.id,
+          userId: resolveUserId(alias),
+          createdAt: hoursAfter(record.createdAt, 2 + likeIndex),
+        },
+      });
+    }
 
-    const replyId = `seed-comment-${postIndex}-reply`;
+    const flatComments = flattenComments(post.comments);
 
-    await prisma.comment.upsert({
-      where: { id: replyId },
-      update: {},
-      create: {
-        id: replyId,
-        postId: post.id,
-        parentId: rootId,
-        authorId: readerIds[(postIndex + 1) % readerIds.length],
-        body: seedReplyBodies[postIndex % seedReplyBodies.length],
-        createdAt: hoursAfter(rootCreatedAt, 4),
-      },
-    });
+    for (const [index, { comment, parentKey }] of flatComments.entries()) {
+      const createdAt = new Date(
+        Math.min(
+          hoursAfter(
+            record.createdAt,
+            COMMENT_SPACING_HOURS * (index + 1),
+          ).getTime(),
+          now.getTime(),
+        ),
+      );
+      const data = {
+        postId: record.id,
+        authorId: resolveUserId(comment.author),
+        parentId: parentKey ? `seed-comment-${parentKey}` : null,
+        body: comment.body,
+        createdAt,
+      };
+
+      await prisma.comment.upsert({
+        where: { id: `seed-comment-${comment.key}` },
+        update: data,
+        create: { id: `seed-comment-${comment.key}`, ...data },
+      });
+    }
   }
 }
 
 export async function seedDatabase(
   prisma: PrismaClient,
   admin: SeedAdminInput,
+  now: Date = new Date(),
 ) {
   const adminUser = await seedAdmin(prisma, admin);
   const readers = await seedReaderUsers(prisma);
-  const posts = await seedPostRecords(prisma, adminUser.id);
+  const posts = await seedPostRecords(prisma, adminUser.id, now);
+  const userIdByAlias = new Map<string, string>([
+    [SEED_ADMIN_ALIAS, adminUser.id],
+    ...readers.map((reader, index) => [seedReaders[index].alias, reader.id] as const),
+  ]);
 
-  await seedEngagement(
-    prisma,
-    posts,
-    readers.map((reader) => reader.id),
-  );
+  await seedEngagement(prisma, posts, userIdByAlias, now);
 }
