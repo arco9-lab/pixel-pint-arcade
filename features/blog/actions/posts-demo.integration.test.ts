@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/db/prisma";
+import { demoCovers } from "@/features/demo/covers";
 import {
   createTestPost,
   createTestUser,
@@ -110,19 +111,19 @@ describe("demo post actions", () => {
     const demo = await signIn("DEMO");
     const post = await createTestPost({
       authorId: demo.id,
-      coverImageUrl: "/demo/covers/arcade-night.png",
+      coverImageUrl: demoCovers[0].url,
     });
 
     await expect(
       updatePostAction(
         { ok: false },
-        postFormData({ postId: post.id, coverImageUrl: "/demo/covers/arcade-night.png" }),
+        postFormData({ postId: post.id, coverImageUrl: demoCovers[0].url }),
       ),
     ).resolves.toMatchObject({ ok: true });
 
     await expect(
       prisma.post.findUnique({ where: { id: post.id } }),
-    ).resolves.toMatchObject({ coverImageUrl: "/demo/covers/arcade-night.png" });
+    ).resolves.toMatchObject({ coverImageUrl: demoCovers[0].url });
   });
 
   it("reports ownership errors when touching another user's post", async () => {

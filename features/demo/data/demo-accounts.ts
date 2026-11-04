@@ -33,6 +33,8 @@ export async function createDemoAccount(options: {
   const passwordHash = await hashPassword(password);
 
   return prisma.$transaction(async (transaction) => {
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('demo-account-ip'), hashtext(${options.ipHash}))`;
+
     const recentAccounts = await transaction.user.count({
       where: {
         demoIpHash: options.ipHash,

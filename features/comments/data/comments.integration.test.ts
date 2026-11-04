@@ -122,6 +122,72 @@ describe("comment data functions", () => {
     ).rejects.toThrow("Comment rate limited");
   });
 
+  it("enforces the rate limit under parallel requests", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const user = await signIn();
+    await Promise.all(
+      Array.from({ length: 5 }, () => prisma.$queryRaw`SELECT 1`),
+    );
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 5 }, (_, index) =>
+        createComment({ postId: post.id, body: `Parallel comment ${index}` }),
+      ),
+    );
+
+    const rejected = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(
+      1,
+    );
+    expect(rejected).toHaveLength(4);
+    rejected.forEach((result) => {
+      expect(result.reason).toMatchObject({ message: "Comment rate limited" });
+    });
+    expect(await prisma.comment.count({ where: { authorId: user.id } })).toBe(1);
+  });
+
+  it("rejects parallel duplicates", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const user = await signIn();
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 3 }, () =>
+        createComment({ postId: post.id, body: "Same parallel body" }),
+      ),
+    );
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(
+      1,
+    );
+    expect(await prisma.comment.count({ where: { authorId: user.id } })).toBe(1);
+  });
+
+  it("does not block other users", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    const post = await createTestPost({ authorId: admin.id });
+    const firstUser = await createTestUser();
+    const secondUser = await createTestUser();
+
+    const createAs = (user: typeof firstUser, body: string) => {
+      authMock.currentUser = user;
+
+      return createComment({ postId: post.id, body });
+    };
+
+    const results = await Promise.allSettled([
+      createAs(firstUser, "First user comment"),
+      createAs(secondUser, "Second user comment"),
+    ]);
+
+    expect(results.every((result) => result.status === "fulfilled")).toBe(true);
+    expect(await prisma.comment.count({ where: { postId: post.id } })).toBe(2);
+  });
+
   it("rejects duplicate last comments after the rate-limit window", async () => {
     const admin = await createTestUser({ role: "ADMIN" });
     const post = await createTestPost({ authorId: admin.id });

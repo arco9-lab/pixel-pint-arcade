@@ -15,7 +15,7 @@ export const postSchema = z.object({
     .string()
     .trim()
     .max(1000)
-    .refine(isAllowedCoverImageUrl)
+    .refine(isAllowedCoverImageUrl, { message: "Choose a valid cover image." })
     .nullable()
     .optional(),
   coverImageAlt: z.string().trim().max(180).nullable().optional(),

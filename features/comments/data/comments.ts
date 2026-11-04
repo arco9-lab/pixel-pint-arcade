@@ -90,71 +90,76 @@ export const createComment = async (input: {
     throw new Error("Comments closed");
   }
 
-  const latestComment = await prisma.comment.findFirst({
-    where: { authorId: user.id },
-    orderBy: { createdAt: "desc" },
-    select: {
-      body: true,
-      createdAt: true,
-    },
-  });
+  return prisma.$transaction(async (transaction) => {
+    await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('comment-author'), hashtext(${user.id}))`;
 
-  if (
-    latestComment &&
-    Date.now() - latestComment.createdAt.getTime() < COMMENT_RATE_LIMIT_MS
-  ) {
-    throw new Error("Comment rate limited");
-  }
-
-  if (
-    latestComment &&
-    normalizeCommentBody(latestComment.body) === normalizeCommentBody(input.body)
-  ) {
-    throw new Error("Duplicate comment");
-  }
-
-  if (countCommentLinks(input.body) > MAX_COMMENT_LINKS) {
-    throw new Error("Too many comment links");
-  }
-
-  if (input.parentId) {
-    const parent = await prisma.comment.findFirst({
-      where: {
-        id: input.parentId,
-        postId: input.postId,
+    const latestComment = await transaction.comment.findFirst({
+      where: { authorId: user.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        body: true,
+        createdAt: true,
       },
-      select: { id: true },
     });
 
-    if (!parent) {
-      throw new Error("Parent comment not found");
+    if (
+      latestComment &&
+      Date.now() - latestComment.createdAt.getTime() < COMMENT_RATE_LIMIT_MS
+    ) {
+      throw new Error("Comment rate limited");
     }
-  }
 
-  const comment = await prisma.comment.create({
-    data: {
-      body: input.body,
-      postId: input.postId,
-      parentId: input.parentId,
-      authorId: user.id,
-    },
-    select: {
-      id: true,
-      body: true,
-      postId: true,
-      parentId: true,
-      createdAt: true,
-      author: {
-        select: {
-          id: true,
-          name: true,
-          image: true,
+    if (
+      latestComment &&
+      normalizeCommentBody(latestComment.body) ===
+        normalizeCommentBody(input.body)
+    ) {
+      throw new Error("Duplicate comment");
+    }
+
+    if (countCommentLinks(input.body) > MAX_COMMENT_LINKS) {
+      throw new Error("Too many comment links");
+    }
+
+    if (input.parentId) {
+      const parent = await transaction.comment.findFirst({
+        where: {
+          id: input.parentId,
+          postId: input.postId,
+        },
+        select: { id: true },
+      });
+
+      if (!parent) {
+        throw new Error("Parent comment not found");
+      }
+    }
+
+    const comment = await transaction.comment.create({
+      data: {
+        body: input.body,
+        postId: input.postId,
+        parentId: input.parentId,
+        authorId: user.id,
+      },
+      select: {
+        id: true,
+        body: true,
+        postId: true,
+        parentId: true,
+        createdAt: true,
+        author: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  return toCommentDTO(comment);
+    return toCommentDTO(comment);
+  });
 };
 
 export const getCurrentUserComments = async (): Promise<AccountCommentDTO[]> => {

@@ -62,6 +62,7 @@ import {
   updatePost,
 } from "@/features/blog/data/posts";
 import { createComment } from "@/features/comments/data/comments";
+import { demoCovers } from "@/features/demo/covers";
 import {
   togglePostBookmark,
   togglePostLike,
@@ -164,7 +165,7 @@ describe("demo post creation rules", () => {
       createPost(
         demoPostInput({
           slug: "gallery",
-          coverImageUrl: "/demo/covers/arcade-night.png",
+          coverImageUrl: demoCovers[0].url,
         }),
       ),
     ).resolves.toBeUndefined();
@@ -173,11 +174,32 @@ describe("demo post creation rules", () => {
       "https://store.public.blob.vercel-storage.com/posts/cover.png",
       "/uploads/posts/cover.png",
       "https://example.com/cover.png",
+      "/demo/covers/nonexistent.webp",
     ]) {
       await expect(
         createPost(demoPostInput({ slug: "foreign", coverImageUrl })),
       ).rejects.toThrow("InvalidDemoCover");
     }
+  });
+
+  it("rejects non-gallery covers when a demo user updates their post", async () => {
+    const owner = await signIn("DEMO");
+    const ownPost = await createTestPost({
+      authorId: owner.id,
+      slug: "own-cover-post",
+      coverImageUrl: demoCovers[0].url,
+    });
+
+    await expect(
+      updatePost(
+        ownPost.id,
+        demoPostInput({ coverImageUrl: "/demo/covers/nonexistent.webp" }),
+      ),
+    ).rejects.toThrow("InvalidDemoCover");
+
+    await expect(
+      prisma.post.findUniqueOrThrow({ where: { id: ownPost.id } }),
+    ).resolves.toMatchObject({ coverImageUrl: demoCovers[0].url });
   });
 });
 

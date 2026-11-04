@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { prisma } from "@/db/prisma";
+import { demoCovers } from "@/features/demo/covers";
 import {
   createTestPost,
   createTestUser,
@@ -93,20 +94,21 @@ describe("post cover image actions", () => {
         { ok: false },
         postFormData({
           slug: "gallery-cover",
-          coverImageUrl: "/demo/covers/arcade-night.png",
+          coverImageUrl: demoCovers[0].url,
         }),
       ),
     ).resolves.toMatchObject({ ok: true });
 
     await expect(
       prisma.post.findUnique({ where: { slug: "gallery-cover" } }),
-    ).resolves.toMatchObject({ coverImageUrl: "/demo/covers/arcade-night.png" });
+    ).resolves.toMatchObject({ coverImageUrl: demoCovers[0].url });
   });
 
   it.each([
     "https://example.com/cover.png",
     "/uploads/posts/cover.png",
     "/demo/covers/../secret.png",
+    "/demo/covers/nonexistent.webp",
   ])("rejects the foreign cover url %s", async (coverImageUrl) => {
     await expect(
       createPostAction(
@@ -200,7 +202,7 @@ describe("post cover image actions", () => {
   it("does not call Blob for gallery covers", async () => {
     const post = await createTestPost({
       authorId: authMock.currentUser!.id,
-      coverImageUrl: "/demo/covers/arcade-night.png",
+      coverImageUrl: demoCovers[0].url,
     });
 
     await deletePostAction({ ok: false }, idFormData("postId", post.id));

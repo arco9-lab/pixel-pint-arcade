@@ -1,3 +1,5 @@
+import { demoCovers } from "@/features/demo/covers";
+
 export type CoverUploadMode = "form" | "blob";
 
 export const COVER_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -12,7 +14,7 @@ export const COVER_IMAGE_CONTENT_TYPES = [
 export const COVER_BLOB_PATH_PREFIX = "posts/";
 
 const BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
-const DEMO_COVER_PATH_PATTERN = /^\/demo\/covers\/[A-Za-z0-9._-]+$/;
+const demoCoverUrls = new Set(demoCovers.map((cover) => cover.url));
 
 export const isBlobUrl = (value: string) => {
   try {
@@ -24,8 +26,7 @@ export const isBlobUrl = (value: string) => {
   }
 };
 
-export const isDemoCoverUrl = (value: string) =>
-  DEMO_COVER_PATH_PATTERN.test(value) && !value.includes("..");
+export const isDemoCoverUrl = (value: string) => demoCoverUrls.has(value);
 
 export const isAllowedCoverImageUrl = (value: string) =>
   isBlobUrl(value) || isDemoCoverUrl(value);
