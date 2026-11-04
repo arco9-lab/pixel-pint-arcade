@@ -12,7 +12,7 @@ import {
   deletePost,
   updatePost,
 } from "@/features/blog/data/posts";
-import { requireAdmin } from "@/server/permissions";
+import { requirePostAuthor } from "@/server/permissions";
 import { deleteCoverImageBlob } from "@/server/blob-storage";
 import { savePostCoverImage } from "@/server/storage";
 import type { ActionState } from "@/lib/action-state";
@@ -28,6 +28,34 @@ const booleanFromForm = (value: FormDataEntryValue | null) => {
 
 const nullableStringFromForm = (value: FormDataEntryValue | null) =>
   typeof value === "string" && value.trim() ? value : null;
+
+const postWriteError = (
+  error: unknown,
+  messages: { ownership: string },
+): ActionState | null => {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+
+  if (error.message === "DemoPostLimit") {
+    return actionError("Demo accounts can have up to 3 posts.");
+  }
+
+  if (error.message === "NotOwner") {
+    return actionError(messages.ownership);
+  }
+
+  if (error.message === "InvalidDemoCover") {
+    return {
+      ok: false,
+      errors: {
+        coverImageUrl: ["Choose a cover from the gallery."],
+      },
+    };
+  }
+
+  return null;
+};
 
 const coverImageError = (error: unknown): ActionState | null => {
   if (!(error instanceof Error)) {
@@ -81,10 +109,11 @@ export async function createPostAction(
   }
 
   try {
-    await requireAdmin();
-    const uploadedCoverImageUrl = await savePostCoverImage(
-      formData.get("coverImageFile"),
-    );
+    const author = await requirePostAuthor();
+    const uploadedCoverImageUrl =
+      author.role === "DEMO"
+        ? undefined
+        : await savePostCoverImage(formData.get("coverImageFile"));
 
     await createPost({
       ...parsed.data,
@@ -102,6 +131,14 @@ export async function createPostAction(
 
     if (error instanceof Error && error.message === "Forbidden") {
       return actionError("Only admins can create posts.");
+    }
+
+    const writeError = postWriteError(error, {
+      ownership: "You can edit only your own posts.",
+    });
+
+    if (writeError) {
+      return writeError;
     }
 
     const uploadError = coverImageError(error);
@@ -146,10 +183,11 @@ export async function updatePostAction(
       coverImageUrl: submittedCoverImageUrl,
       ...postInput
     } = parsed.data;
-    await requireAdmin();
-    const uploadedCoverImageUrl = await savePostCoverImage(
-      formData.get("coverImageFile"),
-    );
+    const author = await requirePostAuthor();
+    const uploadedCoverImageUrl =
+      author.role === "DEMO"
+        ? undefined
+        : await savePostCoverImage(formData.get("coverImageFile"));
     const removeCoverImage = booleanFromForm(formData.get("removeCoverImage"));
     const coverImageUrl = removeCoverImage
       ? null
@@ -180,6 +218,14 @@ export async function updatePostAction(
 
     if (error instanceof Error && error.message === "NotFound") {
       return actionError("Post not found.");
+    }
+
+    const writeError = postWriteError(error, {
+      ownership: "You can edit only your own posts.",
+    });
+
+    if (writeError) {
+      return writeError;
     }
 
     const uploadError = coverImageError(error);
@@ -222,6 +268,14 @@ export async function deletePostAction(
 
     if (error instanceof Error && error.message === "Forbidden") {
       return actionError("Only admins can delete posts.");
+    }
+
+    const writeError = postWriteError(error, {
+      ownership: "You can delete only your own posts.",
+    });
+
+    if (writeError) {
+      return writeError;
     }
 
     return actionError("Could not delete the post.");

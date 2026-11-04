@@ -187,4 +187,93 @@ describe("PostEditorForm", () => {
       expect(blobClientMock.upload).not.toHaveBeenCalled();
     });
   });
+
+  describe("demo variant", () => {
+    const demoCovers = [
+      { url: "/demo/covers/arcade-night.png", alt: "Arcade at night" },
+      { url: "/demo/covers/pixel-pint.png", alt: "A pixel pint" },
+    ];
+
+    const namedInput = (container: HTMLElement, name: string) =>
+      container.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+
+    it("hides the slug, comments toggle and file upload", async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <PostEditorForm demoCovers={demoCovers} variant="demo" />,
+      );
+
+      expect(screen.queryByLabelText("Slug")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Allow comments")).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole("tab", { name: "Cover" }));
+
+      expect(document.getElementById("coverImageFile")).toBeNull();
+      expect(namedInput(container, "coverImageFile")).toBeNull();
+    });
+
+    it("sends a slug derived from the title in a hidden field", async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <PostEditorForm demoCovers={demoCovers} variant="demo" />,
+      );
+
+      expect(namedInput(container, "slug")).toHaveValue("post");
+
+      await user.type(screen.getByLabelText("Title"), "My Demo Story");
+
+      expect(namedInput(container, "slug")).toHaveValue("my-demo-story");
+    });
+
+    it("selects a gallery cover and sends its url and alt", async () => {
+      const user = userEvent.setup();
+      const { container } = render(
+        <PostEditorForm demoCovers={demoCovers} variant="demo" />,
+      );
+
+      await user.click(screen.getByRole("tab", { name: "Cover" }));
+
+      expect(screen.getAllByRole("radio")).toHaveLength(3);
+      expect(screen.getByRole("radio", { name: "No cover" })).toBeChecked();
+      expect(namedInput(container, "removeCoverImage")).toHaveValue("on");
+
+      await user.click(screen.getByRole("radio", { name: "A pixel pint" }));
+
+      expect(screen.getByRole("radio", { name: "A pixel pint" })).toBeChecked();
+      expect(namedInput(container, "removeCoverImage")).toBeNull();
+      expect(namedInput(container, "coverImageAlt")).toHaveValue("A pixel pint");
+    });
+
+    it("preselects the current cover when editing", async () => {
+      const user = userEvent.setup();
+
+      render(
+        <PostEditorForm
+          demoCovers={demoCovers}
+          initialValues={{
+            id: "post-1",
+            title: "Existing",
+            slug: "existing-abc123",
+            excerpt: "",
+            coverImageUrl: "/demo/covers/arcade-night.png",
+            coverImageAlt: "Arcade at night",
+            seoTitle: "",
+            seoDescription: "",
+            tags: "",
+            content: "Body",
+            published: true,
+            commentsEnabled: false,
+          }}
+          mode="edit"
+          variant="demo"
+        />,
+      );
+
+      await user.click(screen.getByRole("tab", { name: "Cover" }));
+
+      expect(
+        screen.getByRole("radio", { name: "Arcade at night" }),
+      ).toBeChecked();
+    });
+  });
 });

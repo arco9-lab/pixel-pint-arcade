@@ -12,6 +12,7 @@ import {
   type CoverUploadMode,
 } from "@/features/blog/cover-image";
 import { parseArticleContent } from "@/features/blog/data/article-content";
+import type { DemoCover } from "@/features/demo/covers";
 import { ArticleBody } from "./ArticleBody";
 import { PostCoverImage } from "./PostCoverImage";
 import styles from "./PostEditorForm.module.css";
@@ -45,8 +46,12 @@ const parseTagPreview = (value: string) => {
   return [...tags.entries()].map(([slug, name]) => ({ name, slug }));
 };
 
+type PostEditorVariant = "admin" | "demo";
+
 type PostEditorFieldsProps = {
   coverUploadMode: CoverUploadMode;
+  demoCovers: DemoCover[];
+  variant: PostEditorVariant;
   initialValues: PostEditorInitialValues;
   mode: PostEditorMode;
   pending: boolean;
@@ -87,6 +92,8 @@ const emptyInitialValues: PostEditorInitialValues = {
 
 const PostEditorFields = ({
   coverUploadMode,
+  demoCovers,
+  variant,
   initialValues,
   mode,
   pending,
@@ -105,6 +112,15 @@ const PostEditorFields = ({
   const [coverFileName, setCoverFileName] = useState("");
   const [coverPreviewUrl, setCoverPreviewUrl] = useState("");
   const [removeCoverImage, setRemoveCoverImage] = useState(false);
+  const isDemo = variant === "demo";
+  const [selectedDemoCoverUrl, setSelectedDemoCoverUrl] = useState(
+    demoCovers.some((cover) => cover.url === initialValues.coverImageUrl)
+      ? initialValues.coverImageUrl
+      : "",
+  );
+  const selectedDemoCover = demoCovers.find(
+    (cover) => cover.url === selectedDemoCoverUrl,
+  );
   const [uploadedCoverUrl, setUploadedCoverUrl] = useState("");
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadError, setUploadError] = useState("");
@@ -115,8 +131,9 @@ const PostEditorFields = ({
   const [activeTab, setActiveTab] = useState<PostEditorTab>("post");
   const tagPreview = parseTagPreview(tags);
   const articlePreview = useMemo(() => parseArticleContent(content), [content]);
-  const previewCoverSrc =
-    coverPreviewUrl || (removeCoverImage ? "" : initialValues.coverImageUrl);
+  const previewCoverSrc = isDemo
+    ? selectedDemoCoverUrl
+    : coverPreviewUrl || (removeCoverImage ? "" : initialValues.coverImageUrl);
   const tabErrors = {
     cover: Boolean(
       uploadError ||
@@ -303,19 +320,23 @@ const PostEditorFields = ({
           {state.errors?.title ? <p>{state.errors.title[0]}</p> : null}
         </div>
 
-        <div className={styles.field}>
-          <label htmlFor="slug">Slug</label>
-          <input
-            id="slug"
-            name="slug"
-            value={slug}
-            onChange={(event) => handleSlugChange(event.target.value)}
-            required
-            maxLength={180}
-            pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-          />
-          {state.errors?.slug ? <p>{state.errors.slug[0]}</p> : null}
-        </div>
+        {isDemo ? (
+          <input name="slug" type="hidden" value={slug || "post"} />
+        ) : (
+          <div className={styles.field}>
+            <label htmlFor="slug">Slug</label>
+            <input
+              id="slug"
+              name="slug"
+              value={slug}
+              onChange={(event) => handleSlugChange(event.target.value)}
+              required
+              maxLength={180}
+              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+            />
+            {state.errors?.slug ? <p>{state.errors.slug[0]}</p> : null}
+          </div>
+        )}
 
         <div className={styles.field}>
           <label htmlFor="excerpt">Excerpt</label>
@@ -374,14 +395,16 @@ const PostEditorFields = ({
           <span>Publish now</span>
         </label>
 
-        <label className={styles.toggle}>
-          <input
-            name="commentsEnabled"
-            type="checkbox"
-            defaultChecked={initialValues.commentsEnabled}
-          />
-          <span>Allow comments</span>
-        </label>
+        {isDemo ? null : (
+          <label className={styles.toggle}>
+            <input
+              name="commentsEnabled"
+              type="checkbox"
+              defaultChecked={initialValues.commentsEnabled}
+            />
+            <span>Allow comments</span>
+          </label>
+        )}
       </section>
 
       <section
@@ -426,74 +449,117 @@ const PostEditorFields = ({
         id="post-editor-panel-cover"
         role="tabpanel"
       >
-        <div className={styles.field}>
-          <span className={styles.fieldLabel}>Cover image</span>
-          <input
-            accept="image/gif,image/jpeg,image/png,image/webp"
-            className={styles.fileInput}
-            id="coverImageFile"
-            name={coverUploadMode === "form" ? "coverImageFile" : undefined}
-            onChange={(event) => handleCoverFileChange(event.target.files?.[0])}
-            type="file"
-          />
-          <label className={styles.fileButton} htmlFor="coverImageFile">
-            Choose image
-          </label>
-          <span className={styles.fileName}>
-            {coverFileName || "No image selected"}
-          </span>
-          {coverUploadMode === "blob" ? (
-            <input name="coverImageUrl" type="hidden" value={uploadedCoverUrl} />
-          ) : null}
-          {uploadProgress !== null ? (
-            <span className={styles.fileName} role="status">
-              Uploading... {uploadProgress}%
-            </span>
-          ) : null}
-          {uploadedCoverUrl ? (
-            <span className={styles.fileName} role="status">
-              Cover uploaded.
-            </span>
-          ) : null}
-          {uploadError ? <p>{uploadError}</p> : null}
-          {state.errors?.coverImageFile ? (
-            <p>{state.errors.coverImageFile[0]}</p>
-          ) : null}
-          {state.errors?.coverImageUrl ? (
-            <p>{state.errors.coverImageUrl[0]}</p>
-          ) : null}
-          {initialValues.coverImageUrl ? (
-            <div className={styles.coverPreview}>
-              <PostCoverImage
-                alt={initialValues.coverImageAlt || initialValues.title}
-                src={initialValues.coverImageUrl}
-              />
+        {isDemo ? (
+          <>
+            <fieldset className={styles.field}>
+              <legend className={styles.fieldLabel}>Cover image</legend>
               <label className={styles.removeCover}>
                 <input
-                  checked={removeCoverImage}
-                  name="removeCoverImage"
-                  onChange={(event) => setRemoveCoverImage(event.target.checked)}
-                  type="checkbox"
+                  checked={selectedDemoCoverUrl === ""}
+                  name="coverImageUrl"
+                  onChange={() => setSelectedDemoCoverUrl("")}
+                  type="radio"
+                  value=""
                 />
-                <span>Remove current cover</span>
+                <span>No cover</span>
               </label>
+              {demoCovers.map((cover) => (
+                <label className={styles.removeCover} key={cover.url}>
+                  <input
+                    checked={selectedDemoCoverUrl === cover.url}
+                    name="coverImageUrl"
+                    onChange={() => setSelectedDemoCoverUrl(cover.url)}
+                    type="radio"
+                    value={cover.url}
+                  />
+                  <PostCoverImage alt={cover.alt} src={cover.url} />
+                </label>
+              ))}
+              {selectedDemoCoverUrl === "" ? (
+                <input name="removeCoverImage" type="hidden" value="on" />
+              ) : null}
+              <input
+                name="coverImageAlt"
+                type="hidden"
+                value={selectedDemoCover?.alt ?? ""}
+              />
+              {state.errors?.coverImageUrl ? (
+                <p>{state.errors.coverImageUrl[0]}</p>
+              ) : null}
+            </fieldset>
+          </>
+        ) : (
+          <>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Cover image</span>
+              <input
+                accept="image/gif,image/jpeg,image/png,image/webp"
+                className={styles.fileInput}
+                id="coverImageFile"
+                name={coverUploadMode === "form" ? "coverImageFile" : undefined}
+                onChange={(event) => handleCoverFileChange(event.target.files?.[0])}
+                type="file"
+              />
+              <label className={styles.fileButton} htmlFor="coverImageFile">
+                Choose image
+              </label>
+              <span className={styles.fileName}>
+                {coverFileName || "No image selected"}
+              </span>
+              {coverUploadMode === "blob" ? (
+                <input name="coverImageUrl" type="hidden" value={uploadedCoverUrl} />
+              ) : null}
+              {uploadProgress !== null ? (
+                <span className={styles.fileName} role="status">
+                  Uploading... {uploadProgress}%
+                </span>
+              ) : null}
+              {uploadedCoverUrl ? (
+                <span className={styles.fileName} role="status">
+                  Cover uploaded.
+                </span>
+              ) : null}
+              {uploadError ? <p>{uploadError}</p> : null}
+              {state.errors?.coverImageFile ? (
+                <p>{state.errors.coverImageFile[0]}</p>
+              ) : null}
+              {state.errors?.coverImageUrl ? (
+                <p>{state.errors.coverImageUrl[0]}</p>
+              ) : null}
+              {initialValues.coverImageUrl ? (
+                <div className={styles.coverPreview}>
+                  <PostCoverImage
+                    alt={initialValues.coverImageAlt || initialValues.title}
+                    src={initialValues.coverImageUrl}
+                  />
+                  <label className={styles.removeCover}>
+                    <input
+                      checked={removeCoverImage}
+                      name="removeCoverImage"
+                      onChange={(event) => setRemoveCoverImage(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>Remove current cover</span>
+                  </label>
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
 
-        <div className={styles.field}>
-          <label htmlFor="coverImageAlt">Cover image alt</label>
-          <input
-            id="coverImageAlt"
-            name="coverImageAlt"
-            maxLength={180}
-            value={coverImageAlt}
-            onChange={(event) => setCoverImageAlt(event.target.value)}
-          />
-          {state.errors?.coverImageAlt ? (
-            <p>{state.errors.coverImageAlt[0]}</p>
-          ) : null}
-        </div>
+            <div className={styles.field}>
+              <label htmlFor="coverImageAlt">Cover image alt</label>
+              <input
+                id="coverImageAlt"
+                name="coverImageAlt"
+                maxLength={180}
+                value={coverImageAlt}
+                onChange={(event) => setCoverImageAlt(event.target.value)}
+              />
+              {state.errors?.coverImageAlt ? (
+                <p>{state.errors.coverImageAlt[0]}</p>
+              ) : null}
+            </div>
+          </>
+        )}
       </section>
 
       <section
@@ -556,12 +622,16 @@ const PostEditorFields = ({
 
 type PostEditorFormProps = {
   coverUploadMode?: CoverUploadMode;
+  demoCovers?: DemoCover[];
+  variant?: PostEditorVariant;
   initialValues?: PostEditorInitialValues;
   mode?: PostEditorMode;
 };
 
 export const PostEditorForm = ({
   coverUploadMode = "form",
+  demoCovers = [],
+  variant = "admin",
   initialValues = emptyInitialValues,
   mode = "create",
 }: PostEditorFormProps) => {
@@ -577,6 +647,8 @@ export const PostEditorForm = ({
             : initialValues.id ?? "edit"
         }
         coverUploadMode={coverUploadMode}
+        demoCovers={demoCovers}
+        variant={variant}
         initialValues={initialValues}
         mode={mode}
         pending={pending}

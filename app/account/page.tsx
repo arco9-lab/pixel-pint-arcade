@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { DEMO_POST_LIMIT } from "@/features/demo/constants";
 import { DemoAccountBanner } from "@/features/demo/components/DemoAccountBanner";
 import { SignOutButton } from "@/features/auth/components/SignOutButton";
 import { DeletePostButton } from "@/features/blog/components/DeletePostButton";
@@ -36,8 +37,10 @@ export default async function AccountPage() {
 
   const user = await requireUserRecord();
   const isAdmin = user.role === "ADMIN";
+  const isDemo = user.role === "DEMO";
+  const canWritePosts = isAdmin || isDemo;
   const [posts, comments, savedPosts] = await Promise.all([
-    isAdmin ? getCurrentUserPosts() : Promise.resolve([]),
+    canWritePosts ? getCurrentUserPosts() : Promise.resolve([]),
     getCurrentUserComments(),
     getCurrentUserSavedPosts(),
   ]);
@@ -61,16 +64,26 @@ export default async function AccountPage() {
 
         <nav className={styles.tabs} aria-label="Account sections">
           {isAdmin ? <Link href="/admin/posts/new">Write post</Link> : null}
+          {isDemo && posts.length < DEMO_POST_LIMIT ? (
+            <Link href="/account/posts/new">Write post</Link>
+          ) : null}
+          {isDemo && posts.length >= DEMO_POST_LIMIT ? (
+            <span aria-disabled="true" className={styles.disabledTab}>
+              Write post
+            </span>
+          ) : null}
           {isAdmin ? <Link href="/admin/posts">Manage posts</Link> : null}
           <a href="#saved">Saved posts</a>
           <a href="#comments">My comments</a>
         </nav>
 
-        {isAdmin ? (
+        {canWritePosts ? (
           <section className={styles.section} id="posts">
             <div className={styles.sectionHeader}>
               <h2>My posts</h2>
-              <span>{posts.length}</span>
+              <span>
+                {isDemo ? `${posts.length}/${DEMO_POST_LIMIT}` : posts.length}
+              </span>
             </div>
 
             {posts.length > 0 ? (
@@ -116,7 +129,11 @@ export default async function AccountPage() {
                     <div className={styles.itemActions}>
                       <Link
                         className="pixel-link"
-                        href={`/admin/posts/${post.id}/edit`}
+                        href={
+                          isAdmin
+                            ? `/admin/posts/${post.id}/edit`
+                            : `/account/posts/${post.id}/edit`
+                        }
                       >
                         Edit
                       </Link>

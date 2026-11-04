@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/db/prisma";
+import { getPublishedVisibleToViewerWhere } from "@/features/blog/data/post-visibility";
 import { requireUserRecord } from "@/server/permissions";
 import type {
   AccountCommentDTO,
@@ -70,8 +71,10 @@ export const createComment = async (input: {
   const user = await requireUserRecord();
   const post = await prisma.post.findFirst({
     where: {
-      id: input.postId,
-      published: true,
+      AND: [
+        { id: input.postId },
+        ...getPublishedVisibleToViewerWhere(user.id).AND,
+      ],
     },
     select: {
       commentsEnabled: true,

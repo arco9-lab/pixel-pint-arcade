@@ -47,7 +47,8 @@ export async function generateMetadata({
   params,
 }: BlogPostPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const post = await getPublishedPostBySlug(slug);
+  const session = await getCurrentSession();
+  const post = await getPublishedPostBySlug(slug, session?.user?.id);
 
   if (!post) {
     return {
@@ -79,19 +80,19 @@ export async function generateMetadata({
 
 export default async function BlogPostPage({ params }: BlogPostPageProps) {
   const { slug } = await params;
-  const post = await getPublishedPostBySlug(slug);
+  const session = await getCurrentSession();
+  const post = await getPublishedPostBySlug(slug, session?.user?.id);
 
   if (!post) {
     notFound();
   }
 
-  const [comments, relatedPosts, session] = await Promise.all([
+  const [comments, relatedPosts] = await Promise.all([
     getCommentsForPost(post.id),
     getRelatedPosts({
       postId: post.id,
       tagSlugs: post.tags.map((tag) => tag.slug),
     }),
-    getCurrentSession(),
   ]);
   const currentUser = session?.user ? await requireUserRecord() : null;
   const engagement = await getPostEngagement(post.id, currentUser?.id);
@@ -115,6 +116,11 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
             Back
           </Link>
           <div className="eyebrow">Article</div>
+          {post.visibleOnlyToAuthor ? (
+            <p className={styles.visibilityNotice}>
+              Visible only to you. Other visitors cannot open this post.
+            </p>
+          ) : null}
           <h1>{post.title}</h1>
           <p className={styles.meta}>
             <time dateTime={post.createdAt}>{formatDate(post.createdAt)}</time>

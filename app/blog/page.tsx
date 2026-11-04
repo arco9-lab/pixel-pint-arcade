@@ -4,6 +4,7 @@ import { connection } from "next/server";
 
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
 import { PostCoverImage } from "@/features/blog/components/PostCoverImage";
+import { getCurrentSession } from "@/server/auth";
 import { getPublishedPostCount, getPublishedPosts } from "@/features/blog/data/posts";
 import styles from "./BlogPage.module.css";
 
@@ -43,11 +44,14 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
   const params = await searchParams;
   const query = getSearchValue(params.q)?.trim() ?? "";
   const requestedPage = getPageValue(params.page);
-  const totalPosts = await getPublishedPostCount({ query });
+  const session = await getCurrentSession();
+  const viewerId = session?.user?.id ?? null;
+  const totalPosts = await getPublishedPostCount({ query, viewerId });
   const totalPages = Math.max(1, Math.ceil(totalPosts / POSTS_PER_PAGE));
   const currentPage = Math.min(requestedPage, totalPages);
   const posts = await getPublishedPosts({
     query,
+    viewerId,
     take: POSTS_PER_PAGE,
     skip: (currentPage - 1) * POSTS_PER_PAGE,
   });
@@ -135,6 +139,11 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 <time dateTime={post.createdAt}>
                   {formatDate(post.createdAt)}
                 </time>
+                {post.visibleOnlyToAuthor ? (
+                  <span className={styles.visibilityBadge}>
+                    Visible only to you
+                  </span>
+                ) : null}
                 <h2>
                   <Link href={`/blog/${post.slug}`}>{post.title}</Link>
                 </h2>

@@ -113,4 +113,21 @@ describe("deleteExpiredDemoUsers", () => {
     expect(sessions.map((session) => session.id)).toEqual(["live-session"]);
     expect(verifications.map((item) => item.id)).toEqual(["live-verification"]);
   });
+
+  it("deletes demo posts but keeps tags still used by other posts", async () => {
+    const admin = await createTestUser({ role: "ADMIN" });
+    await createTestPost({ authorId: admin.id, tags: ["Shared Tag"] });
+    const expired = await createDemoUser(hoursFromNow(-1));
+    await createTestPost({
+      authorId: expired.id,
+      tags: ["Shared Tag", "Demo Only Tag"],
+    });
+
+    await deleteExpiredDemoUsers(now);
+
+    const tags = await prisma.tag.findMany({ select: { slug: true } });
+
+    expect(tags.map((tag) => tag.slug)).toEqual(["shared-tag"]);
+    expect(await prisma.post.count()).toBe(1);
+  });
 });

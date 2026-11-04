@@ -13,6 +13,7 @@ export type PostListItemDTO = {
   createdAt: string;
   updatedAt: string;
   commentsEnabled: boolean;
+  visibleOnlyToAuthor: boolean;
   tags: PostTagDTO[];
   author: {
     name: string;

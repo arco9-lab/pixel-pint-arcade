@@ -24,6 +24,8 @@ export const isBlobUrl = (value: string) => {
   }
 };
 
+export const isDemoCoverUrl = (value: string) =>
+  DEMO_COVER_PATH_PATTERN.test(value) && !value.includes("..");
+
 export const isAllowedCoverImageUrl = (value: string) =>
-  isBlobUrl(value) ||
-  (DEMO_COVER_PATH_PATTERN.test(value) && !value.includes(".."));
+  isBlobUrl(value) || isDemoCoverUrl(value);

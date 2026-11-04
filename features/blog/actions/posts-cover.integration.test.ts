@@ -38,6 +38,16 @@ vi.mock("@/server/permissions", () => ({
 
     return authMock.currentUser;
   }),
+  requirePostAuthor: vi.fn(async () => {
+    if (
+      authMock.currentUser?.role !== "ADMIN" &&
+      authMock.currentUser?.role !== "DEMO"
+    ) {
+      throw new Error("Forbidden");
+    }
+
+    return authMock.currentUser;
+  }),
   requireUserRecord: vi.fn(async () => authMock.currentUser),
 }));
 
