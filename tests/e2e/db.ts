@@ -11,11 +11,21 @@ if (!process.env.DATABASE_URL?.includes("_test")) {
   throw new Error("E2E tests must use a test database");
 }
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+let activePool: Pool | undefined;
+
+export function getPool() {
+  activePool ??= new Pool({ connectionString: process.env.DATABASE_URL });
+  return activePool;
+}
+
+export async function closeE2EDatabase() {
+  const poolToClose = activePool;
+  activePool = undefined;
+  await poolToClose?.end();
+}
 
 export async function cleanupE2EDatabase() {
+  const pool = getPool();
   await pool.query('DELETE FROM "Comment"');
   await pool.query('DELETE FROM "PostLike"');
   await pool.query('DELETE FROM "PostBookmark"');
@@ -29,7 +39,25 @@ export async function cleanupE2EDatabase() {
   await pool.query('DELETE FROM "user"');
 }
 
+export async function findUserByEmail(email: string) {
+  const { rows } = await getPool().query<{
+    id: string;
+    name: string;
+    role: string;
+  }>('SELECT "id", "name", "role" FROM "user" WHERE "email" = $1', [email]);
+  return rows[0] ?? null;
+}
+
+export async function countSessionsForUser(userId: string) {
+  const { rows } = await getPool().query<{ total: string }>(
+    'SELECT COUNT(*) AS total FROM "session" WHERE "userId" = $1',
+    [userId],
+  );
+  return Number(rows[0].total);
+}
+
 export async function seedPublishedPostForGuestFlow() {
+  const pool = getPool();
   await pool.query(
     `
       INSERT INTO "user" ("id", "email", "name", "role", "createdAt", "updatedAt")
