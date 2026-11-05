@@ -23,7 +23,7 @@ test.describe("guest signed-in actions", () => {
     await page.goto("/blog/guest-e2e-post");
 
     await expect(
-      page.getByRole("heading", { name: "Guest E2E Post", level: 1 }),
+      page.getByRole("heading", { name: "Guest E2E Post BROKEN", level: 1 })
     ).toBeVisible();
     await expect(page.getByText("Guest intro paragraph.")).toBeVisible();
 
