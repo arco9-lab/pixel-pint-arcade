@@ -56,12 +56,25 @@ export async function countSessionsForUser(userId: string) {
   return Number(rows[0].total);
 }
 
-export async function seedPublishedPostForGuestFlow() {
+type PublishedPostSeed = {
+  id: string;
+  title: string;
+  slug: string;
+  commentsEnabled: boolean;
+  content?: string;
+};
+
+const defaultPostContent = ["Intro paragraph.", "", "## Heading", "Article body."].join(
+  "\n",
+);
+
+export async function seedPublishedPost(post: PublishedPostSeed) {
   const pool = getPool();
   await pool.query(
     `
       INSERT INTO "user" ("id", "email", "name", "role", "createdAt", "updatedAt")
       VALUES ($1, $2, $3, $4, NOW(), NOW())
+      ON CONFLICT ("id") DO NOTHING
     `,
     ["e2e-admin", "e2e-admin@example.test", "E2E Admin", "ADMIN"],
   );
@@ -80,17 +93,75 @@ export async function seedPublishedPostForGuestFlow() {
         "createdAt",
         "updatedAt"
       )
-      VALUES ($1, $2, $3, $4, $5, true, true, $6, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, true, $6, $7, NOW(), NOW())
     `,
     [
-      "e2e-guest-post",
-      "Guest E2E Post",
-      "guest-e2e-post",
-      "A post for guest e2e coverage.",
-      ["Guest intro paragraph.", "", "## Guest Heading", "Guest article body."].join(
-        "\n",
-      ),
+      post.id,
+      post.title,
+      post.slug,
+      `A post for ${post.title} coverage.`,
+      post.content ?? defaultPostContent,
+      post.commentsEnabled,
       "e2e-admin",
     ],
   );
+}
+
+export async function seedPublishedPostForGuestFlow() {
+  await seedPublishedPost({
+    id: "e2e-guest-post",
+    title: "Guest E2E Post",
+    slug: "guest-e2e-post",
+    commentsEnabled: true,
+    content: [
+      "Guest intro paragraph.",
+      "",
+      "## Guest Heading",
+      "Guest article body.",
+    ].join("\n"),
+  });
+}
+
+export async function setPostCommentsEnabled(
+  postId: string,
+  commentsEnabled: boolean,
+) {
+  await getPool().query(
+    'UPDATE "Post" SET "commentsEnabled" = $2 WHERE "id" = $1',
+    [postId, commentsEnabled],
+  );
+}
+
+export async function findCommentsForPost(postId: string) {
+  const { rows } = await getPool().query<{ body: string; authorId: string }>(
+    'SELECT "body", "authorId" FROM "Comment" WHERE "postId" = $1',
+    [postId],
+  );
+  return rows;
+}
+
+export async function backdateCommentsForPost(
+  postId: string,
+  secondsAgo: number,
+) {
+  await getPool().query(
+    `UPDATE "Comment" SET "createdAt" = NOW() - make_interval(secs => $2) WHERE "postId" = $1`,
+    [postId, secondsAgo],
+  );
+}
+
+export async function countPostLikes(postId: string) {
+  const { rows } = await getPool().query<{ total: string }>(
+    'SELECT COUNT(*) AS total FROM "PostLike" WHERE "postId" = $1',
+    [postId],
+  );
+  return Number(rows[0].total);
+}
+
+export async function countPostBookmarks(postId: string) {
+  const { rows } = await getPool().query<{ total: string }>(
+    'SELECT COUNT(*) AS total FROM "PostBookmark" WHERE "postId" = $1',
+    [postId],
+  );
+  return Number(rows[0].total);
 }
