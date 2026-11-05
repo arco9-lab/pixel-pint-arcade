@@ -2,6 +2,9 @@
   "name": "pixel-pint-arcade",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -13,6 +16,7 @@
     "postinstall": "prisma generate",
     "db:seed": "prisma db seed",
     "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run --config config/vitest.config.mts",
     "test:watch": "vitest --config config/vitest.config.mts",
     "test:component": "vitest run --config config/vitest.component.config.mts",

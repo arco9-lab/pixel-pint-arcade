@@ -20,7 +20,6 @@ export default defineConfig({
     fileParallelism: false,
     include: ["**/*.integration.test.ts"],
     maxConcurrency: 1,
-    passWithNoTests: true,
     setupFiles: ["./tests/integration/setup.ts"],
   },
 });
