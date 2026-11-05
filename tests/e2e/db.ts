@@ -165,3 +165,25 @@ export async function countPostBookmarks(postId: string) {
   );
   return Number(rows[0].total);
 }
+
+export async function promoteUserToAdmin(email: string) {
+  await getPool().query('UPDATE "user" SET "role" = \'ADMIN\' WHERE "email" = $1', [
+    email,
+  ]);
+}
+
+export async function findPostBySlug(slug: string) {
+  const { rows } = await getPool().query<{
+    id: string;
+    title: string;
+    published: boolean;
+  }>('SELECT "id", "title", "published" FROM "Post" WHERE "slug" = $1', [slug]);
+  return rows[0] ?? null;
+}
+
+export async function countPosts() {
+  const { rows } = await getPool().query<{ total: string }>(
+    'SELECT COUNT(*) AS total FROM "Post"',
+  );
+  return Number(rows[0].total);
+}
