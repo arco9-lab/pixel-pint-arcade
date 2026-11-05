@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { PostEditorForm } from "@/features/blog/components/PostEditorForm";
 import { getCurrentSession } from "@/server/auth";
+import { getCoverUploadMode } from "@/server/blob-storage";
 import { requireUserRecord } from "@/server/permissions";
 import { getAdminPostForEdit } from "@/features/blog/data/posts";
 import styles from "../../new/NewPostPage.module.css";
@@ -60,6 +61,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
         </section>
 
         <PostEditorForm
+          coverUploadMode={getCoverUploadMode()}
           mode="edit"
           initialValues={{
             id: post.id,

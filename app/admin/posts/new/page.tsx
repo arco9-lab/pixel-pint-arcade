@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { PostEditorForm } from "@/features/blog/components/PostEditorForm";
 import { getCurrentSession } from "@/server/auth";
+import { getCoverUploadMode } from "@/server/blob-storage";
 import { requireUserRecord } from "@/server/permissions";
 import styles from "./NewPostPage.module.css";
 
@@ -40,7 +41,7 @@ export default async function NewPostPage() {
           <p>Create a draft or publish it straight to the blog.</p>
         </section>
 
-        <PostEditorForm />
+        <PostEditorForm coverUploadMode={getCoverUploadMode()} />
       </div>
     </main>
   );

@@ -13,7 +13,7 @@ type CommentThreadItemProps = {
   currentUser:
     | {
         id: string;
-        role: "USER" | "ADMIN";
+        role: "USER" | "ADMIN" | "DEMO";
       }
     | null;
   postId: string;
@@ -48,10 +48,15 @@ export const CommentThreadItem = ({
   const [replyFormOpen, setReplyFormOpen] = useState(false);
   const replyFormId = `comment-${comment.id}-reply-form`;
   const repliesId = `comment-${comment.id}-replies`;
+  const authorName = comment.author?.name ?? "Deleted user";
+  const isAuthor =
+    currentUser !== null &&
+    comment.author !== null &&
+    currentUser.id === comment.author.id;
   const canDelete =
-    currentUser?.role === "ADMIN" || currentUser?.id === comment.author.id;
+    !comment.deleted && (currentUser?.role === "ADMIN" || isAuthor);
   const hasReplies = comment.replies.length > 0;
-  const canReply = commentsEnabled && Boolean(currentUser);
+  const canReply = !comment.deleted && commentsEnabled && Boolean(currentUser);
   const handleReplyPosted = useCallback(() => {
     setReplyFormOpen(false);
     setRepliesExpanded(true);
@@ -62,14 +67,18 @@ export const CommentThreadItem = ({
       <article>
         <header className={styles.commentHeader}>
           <div>
-            <strong>{comment.author.name}</strong>
+            {comment.deleted ? (
+              <span className={styles.deletedLabel}>Comment deleted</span>
+            ) : (
+              <strong>{authorName}</strong>
+            )}
             <time dateTime={comment.createdAt}>{formatDate(comment.createdAt)}</time>
           </div>
           {canDelete ? (
             <DeleteCommentButton commentId={comment.id} postSlug={postSlug} />
           ) : null}
         </header>
-        <p>{comment.body}</p>
+        {comment.deleted ? null : <p>{comment.body}</p>}
         {canReply ? (
           <div className={styles.commentActions}>
             <button
@@ -89,7 +98,7 @@ export const CommentThreadItem = ({
         <div className={styles.replyFormWrap} id={replyFormId}>
           <CommentForm
             className={styles.replyForm}
-            label={`Reply to ${comment.author.name}`}
+            label={`Reply to ${authorName}`}
             onSuccess={handleReplyPosted}
             parentId={comment.id}
             pendingLabel="Replying..."

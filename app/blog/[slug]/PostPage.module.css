@@ -54,3 +54,11 @@
     font-size: 14px;
   }
 }
+
+.visibilityNotice {
+  display: inline-block;
+  margin: 8px 0 0;
+  border: 3px solid var(--yellow);
+  color: var(--yellow);
+  padding: 8px 12px;
+}

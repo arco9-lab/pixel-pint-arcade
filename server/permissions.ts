@@ -44,3 +44,13 @@ export const requireAdmin = cache(async () => {
 
   return user;
 });
+
+export const requirePostAuthor = cache(async () => {
+  const user = await requireUserRecord();
+
+  if (user.role !== "ADMIN" && user.role !== "DEMO") {
+    throw new Error("Forbidden");
+  }
+
+  return user;
+});

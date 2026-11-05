@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { isDemoMode } from "@/lib/demo-mode";
 import styles from "./AuthErrorPage.module.css";
 
 type AuthErrorPageProps = {
@@ -51,9 +52,11 @@ export default async function AuthErrorPage({ searchParams }: AuthErrorPageProps
           <Link className="btn" href="/login">
             Back to login
           </Link>
-          <Link className="btn secondary" href="/register">
-            Create account
-          </Link>
+          {isDemoMode() ? null : (
+            <Link className="btn secondary" href="/register">
+              Create account
+            </Link>
+          )}
         </div>
       </section>
     </main>

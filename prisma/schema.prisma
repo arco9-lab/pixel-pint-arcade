@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   USER
   ADMIN
+  DEMO
 }
 
 model User {
@@ -19,6 +20,8 @@ model User {
   emailVerified Boolean        @default(false)
   image         String?
   role          Role           @default(USER)
+  demoExpiresAt DateTime?
+  demoIpHash    String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   sessions      Session[]
@@ -29,6 +32,8 @@ model User {
   postBookmarks PostBookmark[]
 
   @@unique([email])
+  @@index([role, demoExpiresAt])
+  @@index([demoIpHash, createdAt])
   @@map("user")
 }
 
@@ -80,6 +85,15 @@ model Verification {
   @@map("verification")
 }
 
+model RateLimit {
+  id          String @id
+  key         String @unique
+  count       Int
+  lastRequest BigInt
+
+  @@map("rateLimit")
+}
+
 model Post {
   id              String         @id @default(cuid())
   title           String
@@ -118,13 +132,14 @@ model Comment {
   id        String   @id @default(cuid())
   body      String
   postId    String
-  authorId  String
+  authorId  String?
   parentId  String?
+  deletedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author  User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
   replies Comment[] @relation("CommentReplies")
 

@@ -1,6 +1,6 @@
 import { prisma } from "@/db/prisma";
 
-type TestRole = "USER" | "ADMIN";
+type TestRole = "USER" | "ADMIN" | "DEMO";
 
 export async function createTestUser(options?: {
   id?: string;
@@ -30,6 +30,7 @@ export async function createTestPost(options: {
   published?: boolean;
   commentsEnabled?: boolean;
   tags?: string[];
+  coverImageUrl?: string | null;
 }) {
   const slug =
     options.slug ??
@@ -41,6 +42,7 @@ export async function createTestPost(options: {
       slug,
       excerpt: "Test excerpt",
       content: options.content ?? "Test content",
+      coverImageUrl: options.coverImageUrl,
       published: options.published ?? true,
       commentsEnabled: options.commentsEnabled ?? true,
       author: {
@@ -95,8 +97,18 @@ export function postFormData(input: {
   content?: string;
   published?: boolean;
   commentsEnabled?: boolean;
+  coverImageUrl?: string;
+  removeCoverImage?: boolean;
 }) {
   const formData = new FormData();
+
+  if (input.coverImageUrl) {
+    formData.set("coverImageUrl", input.coverImageUrl);
+  }
+
+  if (input.removeCoverImage) {
+    formData.set("removeCoverImage", "on");
+  }
 
   if (input.postId) {
     formData.set("postId", input.postId);

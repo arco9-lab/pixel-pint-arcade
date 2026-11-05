@@ -5,10 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vercel": "node scripts/build-vercel.mjs",
     "start": "next start",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f app db",
+    "postinstall": "prisma generate",
+    "db:seed": "prisma db seed",
     "lint": "eslint",
     "test": "vitest run --config config/vitest.config.mts",
     "test:watch": "vitest --config config/vitest.config.mts",
@@ -26,6 +29,7 @@
     "@better-auth/prisma-adapter": "^1.6.11",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "@vercel/blob": "^2.8.2",
     "better-auth": "^1.6.11",
     "dotenv": "^17.4.2",
     "next": "16.2.6",
@@ -50,6 +54,7 @@
     "jsdom": "^29.1.1",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.9"
   }

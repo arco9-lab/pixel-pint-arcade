@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/db/prisma";
+import { getPublishedVisibleToViewerWhere } from "@/features/blog/data/post-visibility";
 import { requireUserRecord } from "@/server/permissions";
 import type {
   PostEngagementDTO,
@@ -34,11 +35,10 @@ export const getPostEngagement = async (
   };
 };
 
-const requirePublishedPost = async (postId: string) => {
+const requirePublishedPost = async (postId: string, viewerId: string) => {
   const post = await prisma.post.findFirst({
     where: {
-      id: postId,
-      published: true,
+      AND: [{ id: postId }, ...getPublishedVisibleToViewerWhere(viewerId).AND],
     },
     select: {
       id: true,
@@ -55,7 +55,7 @@ const requirePublishedPost = async (postId: string) => {
 
 export const togglePostLike = async (postId: string) => {
   const user = await requireUserRecord();
-  const post = await requirePublishedPost(postId);
+  const post = await requirePublishedPost(postId, user.id);
   const existingLike = await prisma.postLike.findUnique({
     where: { postId_userId: { postId, userId: user.id } },
     select: { id: true },
@@ -81,7 +81,7 @@ export const togglePostLike = async (postId: string) => {
 
 export const togglePostBookmark = async (postId: string) => {
   const user = await requireUserRecord();
-  const post = await requirePublishedPost(postId);
+  const post = await requirePublishedPost(postId, user.id);
   const existingBookmark = await prisma.postBookmark.findUnique({
     where: { postId_userId: { postId, userId: user.id } },
     select: { id: true },

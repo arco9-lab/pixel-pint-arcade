@@ -7,6 +7,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 
 import { prisma } from "@/db/prisma";
+import { isDemoMode } from "@/lib/demo-mode";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID;
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -29,6 +30,9 @@ const socialProviders =
 
 export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  trustedOrigins: process.env.BETTER_AUTH_URL
+    ? [process.env.BETTER_AUTH_URL]
+    : [],
   secret: process.env.BETTER_AUTH_SECRET,
   onAPIError: {
     errorURL: "/auth/error",
@@ -38,6 +42,11 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    disableSignUp: isDemoMode(),
+  },
+  rateLimit: {
+    enabled: true,
+    storage: "database",
   },
   account: {
     accountLinking: {

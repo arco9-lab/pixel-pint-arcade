@@ -14,7 +14,7 @@ const authMock = vi.hoisted(() => ({
     name: string;
     email: string;
     image: string | null;
-    role: "USER" | "ADMIN";
+    role: "USER" | "ADMIN" | "DEMO";
   },
 }));
 
@@ -29,6 +29,20 @@ vi.mock("@/server/permissions", () => ({
     }
 
     if (authMock.currentUser.role !== "ADMIN") {
+      throw new Error("Forbidden");
+    }
+
+    return authMock.currentUser;
+  }),
+  requirePostAuthor: vi.fn(async () => {
+    if (!authMock.currentUser) {
+      throw new Error("Unauthorized");
+    }
+
+    if (
+      authMock.currentUser.role !== "ADMIN" &&
+      authMock.currentUser.role !== "DEMO"
+    ) {
       throw new Error("Forbidden");
     }
 
@@ -49,7 +63,7 @@ import {
   updatePostAction,
 } from "@/features/blog/actions/posts";
 
-async function signIn(role: "USER" | "ADMIN") {
+async function signIn(role: "USER" | "ADMIN" | "DEMO") {
   const user = await createTestUser({ role });
   authMock.currentUser = user;
 

@@ -5,17 +5,24 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { authClient } from "@/features/auth/data/auth-client";
+import { startDemoSessionAction } from "@/features/demo/actions/demo-session";
+import { saveDemoCredentials } from "@/features/demo/data/demo-credentials";
 import styles from "./AuthPanel.module.css";
 
 type AuthPanelProps = {
   mode: "sign-in" | "sign-up";
   googleEnabled: boolean;
+  demoMode?: boolean;
 };
 
 const authSuccessPath = "/account";
 const authErrorPath = "/auth/error";
 
-export const AuthPanel = ({ mode, googleEnabled }: AuthPanelProps) => {
+export const AuthPanel = ({
+  mode,
+  googleEnabled,
+  demoMode = false,
+}: AuthPanelProps) => {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
@@ -76,6 +83,42 @@ export const AuthPanel = ({ mode, googleEnabled }: AuthPanelProps) => {
     }
   };
 
+  const handleDemo = async () => {
+    setMessage("");
+    setPending(true);
+
+    try {
+      const demoSession = await startDemoSessionAction();
+
+      if (!demoSession.ok) {
+        setMessage(demoSession.message);
+        return;
+      }
+
+      const result = await authClient.signIn.email({
+        email: demoSession.email,
+        password: demoSession.password,
+        callbackURL: authSuccessPath,
+      });
+
+      if (result.error) {
+        setMessage(result.error.message ?? "Demo sign in failed.");
+        return;
+      }
+
+      saveDemoCredentials({
+        email: demoSession.email,
+        password: demoSession.password,
+      });
+      router.push(authSuccessPath);
+      router.refresh();
+    } catch {
+      setMessage("Could not start the demo. Please try again.");
+    } finally {
+      setPending(false);
+    }
+  };
+
   return (
     <main className={styles.shell}>
       <section className={styles.panel}>
@@ -122,6 +165,16 @@ export const AuthPanel = ({ mode, googleEnabled }: AuthPanelProps) => {
             >
               {isSignUp ? "Create" : "Enter"}
             </button>
+            {demoMode && !isSignUp ? (
+              <button
+                className={`btn ${styles.googleButton}`}
+                type="button"
+                onClick={handleDemo}
+                disabled={pending}
+              >
+                Enter as demo user
+              </button>
+            ) : null}
             {googleEnabled ? (
               <button
                 className={`btn ${styles.googleButton}`}
@@ -137,12 +190,14 @@ export const AuthPanel = ({ mode, googleEnabled }: AuthPanelProps) => {
             {message}
           </div>
         </form>
-        <Link
-          className={styles.switchLink}
-          href={isSignUp ? "/login" : "/register"}
-        >
-          {isSignUp ? "I have account" : "Create account"}
-        </Link>
+        {demoMode ? null : (
+          <Link
+            className={styles.switchLink}
+            href={isSignUp ? "/login" : "/register"}
+          >
+            {isSignUp ? "I have account" : "Create account"}
+          </Link>
+        )}
       </section>
     </main>
   );

@@ -201,3 +201,14 @@
     margin-left: auto;
   }
 }
+
+.disabledTab {
+  border: 3px solid #3a2a4d;
+  background: #120820;
+  color: #6f5a85;
+  padding: 10px 12px;
+  font-family: var(--font-press-start-2p), "Courier New", monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  cursor: not-allowed;
+}

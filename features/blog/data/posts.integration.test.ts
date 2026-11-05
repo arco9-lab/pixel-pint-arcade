@@ -12,11 +12,25 @@ const authMock = vi.hoisted(() => ({
     name: string;
     email: string;
     image: string | null;
-    role: "USER" | "ADMIN";
+    role: "USER" | "ADMIN" | "DEMO";
   },
 }));
 
 vi.mock("@/server/permissions", () => ({
+  requirePostAuthor: vi.fn(async () => {
+    if (!authMock.currentUser) {
+      throw new Error("Unauthorized");
+    }
+
+    if (
+      authMock.currentUser.role !== "ADMIN" &&
+      authMock.currentUser.role !== "DEMO"
+    ) {
+      throw new Error("Forbidden");
+    }
+
+    return authMock.currentUser;
+  }),
   requireUserRecord: vi.fn(async () => {
     if (!authMock.currentUser) {
       throw new Error("Unauthorized");
@@ -48,7 +62,7 @@ import {
   updatePost,
 } from "@/features/blog/data/posts";
 
-async function signIn(role: "USER" | "ADMIN") {
+async function signIn(role: "USER" | "ADMIN" | "DEMO") {
   const user = await createTestUser({ role });
   authMock.currentUser = user;
 
@@ -175,10 +189,13 @@ describe("blog post data functions", () => {
     ).resolves.toEqual({
       previousSlug: "admin-post",
       slug: "updated-admin-post",
+      previousCoverImageUrl: null,
+      coverImageUrl: null,
     });
 
     await expect(deletePost(createdPost.id)).resolves.toEqual({
       slug: "updated-admin-post",
+      coverImageUrl: null,
     });
     await expect(
       prisma.post.findUnique({ where: { id: createdPost.id } }),
