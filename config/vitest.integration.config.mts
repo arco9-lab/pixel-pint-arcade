@@ -18,7 +18,7 @@ export default defineConfig({
   test: {
     environment: "node",
     fileParallelism: false,
-    include: ["**/*.integration.test.ts"],
+    include: ["**/*.no-such-suffix.test.ts"],
     maxConcurrency: 1,
     setupFiles: ["./tests/integration/setup.ts"],
   },
