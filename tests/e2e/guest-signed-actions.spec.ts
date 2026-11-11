@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   cleanupE2EDatabase,
-  pool,
+  closeE2EDatabase,
   seedPublishedPostForGuestFlow,
 } from "./db";
 
@@ -14,7 +14,7 @@ test.describe("guest signed-in actions", () => {
 
   test.afterAll(async () => {
     await cleanupE2EDatabase();
-    await pool.end();
+    await closeE2EDatabase();
   });
 
   test("guest can read a post but cannot use signed-in actions", async ({
